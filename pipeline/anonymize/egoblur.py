@@ -49,7 +49,7 @@ def _torchscript_detector(caminho: Path) -> Detector:
     from torchvision.ops import nms
 
     dispositivo= "cuda" if torch.cuda.is_available() else "cpu"
-    modelo= torch.jit.load(str(caminho), map_location=dispositivo).eval()
+    modelo= torch.jit.load(str(caminho), map_location="cpu").to(dispositivo).eval()
 
     def detetar(image: np.ndarray) -> np.ndarray:
         tensor= torch.from_numpy(np.transpose(image, (2, 0, 1)).copy()).to(dispositivo)
