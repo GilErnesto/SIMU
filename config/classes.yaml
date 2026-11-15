@@ -1,0 +1,30 @@
+# Alturas aproximadas em metros: afinar com medições.
+categorias:
+  sinal:
+    raio_dedup_m: 5
+    altura_m: 0.7
+    limiar_especifica: 0.5
+    classes:
+      - stop
+      - cedencia
+      - limite_velocidade
+      - proibicao
+      - perigo
+      - obrigacao
+      - informacao
+      - outro
+    superclasse:
+      limite_velocidade: proibicao
+    superclasse_padrao: outro
+  iluminacao:
+    raio_dedup_m: 5
+    altura_m: 8
+    classes:
+      - candeeiro
+  residuos:
+    raio_dedup_m: 10
+    altura_m: 1.2
+    classes:
+      - subterraneo
+      - ilha_reciclagem
+      - indiferenciado
