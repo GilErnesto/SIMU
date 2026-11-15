@@ -1,6 +1,9 @@
 # Alturas aproximadas em metros: afinar com medições.
+# consultas: texto em inglês usado pelo detetor zero-shot (OWLv2).
+# rotulo e rotulos: nomes mostrados na interface.
 categorias:
   sinal:
+    rotulo: Sinais
     raio_dedup_m: 5
     altura_m: 0.7
     limiar_especifica: 0.5
@@ -13,18 +16,49 @@ categorias:
       - obrigacao
       - informacao
       - outro
+    rotulos:
+      stop: Stop
+      cedencia: Cedência de passagem
+      limite_velocidade: Limite de velocidade
+      proibicao: Proibição
+      perigo: Perigo
+      obrigacao: Obrigação
+      informacao: Informação
+      outro: Outro sinal
     superclasse:
       limite_velocidade: proibicao
     superclasse_padrao: outro
+    consultas:
+      stop: a red octagonal stop sign
+      cedencia: a triangular give way sign pointing down
+      limite_velocidade: a round speed limit sign
+      proibicao: a round road sign with a red border
+      perigo: a triangular warning road sign with a red border
+      obrigacao: a round blue road sign
+      informacao: a rectangular blue road sign
   iluminacao:
+    rotulo: Iluminação
     raio_dedup_m: 5
     altura_m: 8
     classes:
       - candeeiro
+    rotulos:
+      candeeiro: Candeeiro
+    consultas:
+      candeeiro: a street lamp post
   residuos:
+    rotulo: Resíduos
     raio_dedup_m: 10
     altura_m: 1.2
     classes:
       - subterraneo
       - ilha_reciclagem
       - indiferenciado
+    rotulos:
+      subterraneo: Contentor subterrâneo
+      ilha_reciclagem: Ilha de reciclagem
+      indiferenciado: Contentor de indiferenciados
+    consultas:
+      subterraneo: an underground waste container
+      ilha_reciclagem: a recycling container
+      indiferenciado: a general waste bin

@@ -22,6 +22,9 @@ class Categoria:
     limiar_especifica: float | None
     superclasse: dict[str, str]
     superclasse_padrao: str | None
+    consultas: dict[str, str]
+    rotulo: str
+    rotulos: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,9 @@ def load_classes(path: Path) -> Classes:
                 limiar_especifica=None if limiar is None else float(limiar),
                 superclasse=dict(campos.get("superclasse", {})),
                 superclasse_padrao=campos.get("superclasse_padrao"),
+                consultas=dict(campos.get("consultas", {})),
+                rotulo=str(campos.get("rotulo", nome)),
+                rotulos=dict(campos.get("rotulos", {})),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro
