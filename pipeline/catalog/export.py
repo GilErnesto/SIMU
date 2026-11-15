@@ -2,7 +2,7 @@ import csv
 import io
 
 from geoalchemy2.shape import to_shape
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from pipeline.catalog.write import Elemento, Observacao
@@ -36,12 +36,23 @@ def _atribuicao(elemento: Elemento) -> list[dict]:
     return list(vistos.values())
 
 
-def _carregar(session: Session, estado: str | None) -> list[Elemento]:
+def _carregar(
+    session: Session,
+    estado: str | None,
+    categoria: str | None= None,
+    bbox: tuple[float, float, float, float] | None= None,
+) -> list[Elemento]:
     consulta= select(Elemento).options(
         selectinload(Elemento.observacoes).selectinload(Observacao.imagem)
     )
     if estado is not None:
         consulta= consulta.where(Elemento.estado == estado)
+    if categoria is not None:
+        consulta= consulta.where(Elemento.categoria == categoria)
+    if bbox is not None:
+        consulta= consulta.where(
+            func.ST_Intersects(Elemento.geom, func.ST_MakeEnvelope(*bbox, 4326))
+        )
     return list(session.scalars(consulta.order_by(Elemento.id)))
 
 
@@ -64,10 +75,15 @@ def to_feature(elemento: Elemento) -> dict:
     }
 
 
-def to_geojson(session: Session, estado: str | None= None) -> dict:
+def to_geojson(
+    session: Session,
+    estado: str | None= None,
+    categoria: str | None= None,
+    bbox: tuple[float, float, float, float] | None= None,
+) -> dict:
     return {
         "type": "FeatureCollection",
-        "features": [to_feature(e) for e in _carregar(session, estado)],
+        "features": [to_feature(e) for e in _carregar(session, estado, categoria, bbox)],
     }
 
 
