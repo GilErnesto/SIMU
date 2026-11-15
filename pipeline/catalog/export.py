@@ -41,6 +41,8 @@ def _carregar(
     estado: str | None,
     categoria: str | None= None,
     bbox: tuple[float, float, float, float] | None= None,
+    min_observacoes: int | None= None,
+    min_confianca: float | None= None,
 ) -> list[Elemento]:
     consulta= select(Elemento).options(
         selectinload(Elemento.observacoes).selectinload(Observacao.imagem)
@@ -53,6 +55,10 @@ def _carregar(
         consulta= consulta.where(
             func.ST_Intersects(Elemento.geom, func.ST_MakeEnvelope(*bbox, 4326))
         )
+    if min_observacoes is not None:
+        consulta= consulta.where(Elemento.n_observacoes >= min_observacoes)
+    if min_confianca is not None:
+        consulta= consulta.where(Elemento.confianca >= min_confianca)
     return list(session.scalars(consulta.order_by(Elemento.id)))
 
 
@@ -80,18 +86,29 @@ def to_geojson(
     estado: str | None= None,
     categoria: str | None= None,
     bbox: tuple[float, float, float, float] | None= None,
+    min_observacoes: int | None= None,
+    min_confianca: float | None= None,
 ) -> dict:
     return {
         "type": "FeatureCollection",
-        "features": [to_feature(e) for e in _carregar(session, estado, categoria, bbox)],
+        "features": [
+            to_feature(e)
+            for e in _carregar(session, estado, categoria, bbox, min_observacoes, min_confianca)
+        ],
     }
 
 
-def to_csv(session: Session, estado: str | None= None) -> str:
+def to_csv(
+    session: Session,
+    estado: str | None= None,
+    categoria: str | None= None,
+    min_observacoes: int | None= None,
+    min_confianca: float | None= None,
+) -> str:
     saida= io.StringIO()
     escritor= csv.DictWriter(saida, fieldnames=COLUNAS_CSV)
     escritor.writeheader()
-    for elemento in _carregar(session, estado):
+    for elemento in _carregar(session, estado, categoria, None, min_observacoes, min_confianca):
         feature= to_feature(elemento)
         propriedades= feature["properties"]
         lon, lat= feature["geometry"]["coordinates"]

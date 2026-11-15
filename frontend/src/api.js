@@ -30,10 +30,15 @@ export function obterConfig(sinal) {
   return pedir("/config", { signal: sinal });
 }
 
-export function listarElementos({ categoria, estado }, sinal) {
+export function listarElementos(
+  { categoria, estado, minObservacoes, minConfianca },
+  sinal,
+) {
   const parametros= new URLSearchParams();
   if (categoria) parametros.set("categoria", categoria);
   if (estado) parametros.set("estado", estado);
+  if (minObservacoes) parametros.set("min_observacoes", minObservacoes);
+  if (minConfianca) parametros.set("min_confianca", minConfianca);
   const texto= parametros.toString();
   return pedir(`/elementos${texto ? `?${texto}` : ""}`, { signal: sinal });
 }
@@ -50,7 +55,15 @@ export function corrigirElemento(id, corpo) {
   });
 }
 
-export function ligacaoExportacao(formato, estado) {
-  const sufixo= estado ? `?estado=${encodeURIComponent(estado)}` : "";
-  return `${BASE}/export.${formato}${sufixo}`;
+export function ligacaoExportacao(
+  formato,
+  { categoria, estado, minObservacoes, minConfianca },
+) {
+  const parametros= new URLSearchParams();
+  if (categoria) parametros.set("categoria", categoria);
+  if (estado) parametros.set("estado", estado);
+  if (minObservacoes) parametros.set("min_observacoes", minObservacoes);
+  if (minConfianca) parametros.set("min_confianca", minConfianca);
+  const texto= parametros.toString();
+  return `${BASE}/export.${formato}${texto ? `?${texto}` : ""}`;
 }

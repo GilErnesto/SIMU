@@ -4,9 +4,21 @@ import { corrigirElemento, listarElementos, ligacaoExportacao, obterConfig, obte
 import Detalhe from "./Detalhe.jsx";
 import Lista from "./Lista.jsx";
 import Mapa from "./Mapa.jsx";
-import { ESTADOS, lerNumero, rotuloCategoria } from "./rotulos.js";
+import { ESTADOS, lerNumero, percentagem, rotuloCategoria } from "./rotulos.js";
 
-const SEM_FILTROS= { categoria: "", estado: "" };
+const FILTROS_INICIAIS= { categoria: "", estado: "", minObservacoes: "2", minConfianca: "" };
+const FILTROS_VAZIOS= { categoria: "", estado: "", minObservacoes: "", minConfianca: "" };
+
+function resumoExportacao(dados, filtros) {
+  const partes= [];
+  if (filtros.categoria) partes.push(rotuloCategoria(dados, filtros.categoria));
+  if (filtros.estado) partes.push(ESTADOS[filtros.estado] ?? filtros.estado);
+  if (filtros.minObservacoes) partes.push(`${filtros.minObservacoes}+ observações`);
+  if (filtros.minConfianca) {
+    partes.push(`confiança ≥ ${percentagem(Number(filtros.minConfianca))}`);
+  }
+  return partes.length ? ` (${partes.join(", ")})` : "";
+}
 
 function lerTecnico() {
   try {
@@ -27,7 +39,8 @@ function guardarTecnico(valor) {
 export default function App() {
   const [config, setConfig]= useState({ estado: "a-carregar" });
   const [lista, setLista]= useState({ estado: "a-carregar", features: [] });
-  const [filtros, setFiltros]= useState(SEM_FILTROS);
+  const [filtros, setFiltros]= useState(FILTROS_INICIAIS);
+  const [total, setTotal]= useState(null);
   const [selecionadoId, setSelecionadoId]= useState(null);
   const [foco, setFoco]= useState(null);
   const [detalhe, setDetalhe]= useState({ estado: "a-carregar" });
@@ -62,6 +75,20 @@ export default function App() {
       .then((dados) => setLista({ estado: "ok", features: dados.features }))
       .catch((erro) => {
         if (erro.name !== "AbortError") setLista({ estado: "erro", features: [], erro: erro.message });
+      });
+    return () => controlo.abort();
+  }, [filtros, tentativaLista]);
+
+  useEffect(() => {
+    if (!filtros.minObservacoes && !filtros.minConfianca) {
+      setTotal(null);
+      return undefined;
+    }
+    const controlo= new AbortController();
+    listarElementos({ categoria: filtros.categoria, estado: filtros.estado }, controlo.signal)
+      .then((dados) => setTotal(dados.features.length))
+      .catch((erro) => {
+        if (erro.name !== "AbortError") setTotal(null);
       });
     return () => controlo.abort();
   }, [filtros, tentativaLista]);
@@ -147,10 +174,19 @@ export default function App() {
   }
 
   const dados= config.dados;
-  const temFiltros= Boolean(filtros.categoria || filtros.estado);
+  const temFiltros= Boolean(
+    filtros.categoria || filtros.estado || filtros.minObservacoes || filtros.minConfianca,
+  );
+  const mostrados= lista.features.length;
+  const disponiveis= total ?? mostrados;
+  const sufixoExportar= resumoExportacao(dados, filtros);
   const candidataNumeros= candidata
     ? { lat: lerNumero(candidata.lat), lon: lerNumero(candidata.lon) }
     : null;
+
+  function mostrarTodos() {
+    setFiltros((atuais) => ({ ...atuais, minObservacoes: "", minConfianca: "" }));
+  }
 
   return (
     <div className="app">
@@ -162,11 +198,11 @@ export default function App() {
           Ctrl + F <span className="cabecalho__lugar">{dados.nome}</span>
         </h1>
         <div className="cabecalho__exportar">
-          <a className="botao botao--secundario" href={ligacaoExportacao("geojson", filtros.estado)} download>
-            Exportar GeoJSON
+          <a className="botao botao--secundario" href={ligacaoExportacao("geojson", filtros)} download>
+            Exportar GeoJSON{sufixoExportar}
           </a>
-          <a className="botao botao--secundario" href={ligacaoExportacao("csv", filtros.estado)} download>
-            Exportar CSV
+          <a className="botao botao--secundario" href={ligacaoExportacao("csv", filtros)} download>
+            Exportar CSV{sufixoExportar}
           </a>
         </div>
       </header>
@@ -194,10 +230,48 @@ export default function App() {
             ))}
           </select>
         </div>
+        <div className="campo">
+          <label htmlFor="filtro-observacoes">Mínimo de observações</label>
+          <select
+            id="filtro-observacoes"
+            value={filtros.minObservacoes}
+            onChange={(evento) => mudarFiltro("minObservacoes", evento.target.value)}
+          >
+            <option value="">Todos</option>
+            <option value="2">2 ou mais</option>
+            <option value="3">3 ou mais</option>
+            <option value="5">5 ou mais</option>
+            <option value="10">10 ou mais</option>
+          </select>
+        </div>
+        <div className="campo">
+          <label htmlFor="filtro-confianca">Confiança mínima</label>
+          <select
+            id="filtro-confianca"
+            value={filtros.minConfianca}
+            onChange={(evento) => mudarFiltro("minConfianca", evento.target.value)}
+          >
+            <option value="">Todas</option>
+            <option value="0.2">20%</option>
+            <option value="0.3">30%</option>
+            <option value="0.5">50%</option>
+            <option value="0.7">70%</option>
+          </select>
+        </div>
         <div className="campo campo--tecnico">
           <label htmlFor="tecnico">Técnico</label>
           <input id="tecnico" autoComplete="name" value={tecnico} onChange={(evento) => mudarTecnico(evento.target.value)} />
         </div>
+        {lista.estado === "ok" && (
+          <p className="filtros__resumo" role="status">
+            A mostrar {mostrados} de {disponiveis} elementos.
+            {mostrados < disponiveis && (
+              <button type="button" className="botao botao--ligacao" onClick={mostrarTodos}>
+                Mostrar todos
+              </button>
+            )}
+          </p>
+        )}
       </form>
 
       <nav className="separadores" aria-label="Vista">
@@ -217,7 +291,7 @@ export default function App() {
           temFiltros={temFiltros}
           aoSelecionar={selecionar}
           aoRepetir={() => setTentativaLista((n) => n + 1)}
-          aoLimpar={() => setFiltros(SEM_FILTROS)}
+          aoLimpar={() => setFiltros(FILTROS_VAZIOS)}
         />
         <section className={modoMover ? "mapa mapa--escolher" : "mapa"} aria-label="Mapa dos elementos">
           <Mapa

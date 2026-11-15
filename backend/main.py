@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse, JSONResponse
 from geoalchemy2 import WKTElement
 from geoalchemy2.shape import to_shape
@@ -54,6 +54,11 @@ def _bbox(valor: str | None) -> tuple[float, float, float, float] | None:
     if lon_min >= lon_max or lat_min >= lat_max:
         raise HTTPException(422, "bbox inválida: os mínimos têm de ser menores que os máximos")
     return lon_min, lat_min, lon_max, lat_max
+
+
+def _verificar_categoria(categoria: str | None, classes: Classes) -> None:
+    if categoria is not None and categoria not in classes.categorias:
+        raise HTTPException(422, f"Categoria desconhecida: {categoria}")
 
 
 def _elemento(sessao: Session, elemento_id: int) -> Elemento:
@@ -115,12 +120,20 @@ def listar(
     bbox: str | None= None,
     categoria: str | None= None,
     estado: Estado | None= None,
+    min_observacoes: int | None= Query(default=None, ge=1),
+    min_confianca: float | None= Query(default=None, ge=0, le=1),
     sessao: Session= Depends(get_session),
     classes: Classes= Depends(get_classes),
 ):
-    if categoria is not None and categoria not in classes.categorias:
-        raise HTTPException(422, f"Categoria desconhecida: {categoria}")
-    return to_geojson(sessao, estado, categoria, _bbox(bbox))
+    _verificar_categoria(categoria, classes)
+    return to_geojson(
+        sessao,
+        estado,
+        categoria,
+        _bbox(bbox),
+        min_observacoes=min_observacoes,
+        min_confianca=min_confianca,
+    )
 
 
 @app.get("/elementos/{elemento_id}")
@@ -179,18 +192,46 @@ def imagem(imagem_id: int, sessao: Session= Depends(get_session)):
 
 
 @app.get("/export.geojson")
-def exportar_geojson(estado: Estado | None= None, sessao: Session= Depends(get_session)):
+def exportar_geojson(
+    estado: Estado | None= None,
+    categoria: str | None= None,
+    min_observacoes: int | None= Query(default=None, ge=1),
+    min_confianca: float | None= Query(default=None, ge=0, le=1),
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    _verificar_categoria(categoria, classes)
     return JSONResponse(
-        to_geojson(sessao, estado),
+        to_geojson(
+            sessao,
+            estado,
+            categoria,
+            min_observacoes=min_observacoes,
+            min_confianca=min_confianca,
+        ),
         media_type="application/geo+json",
         headers={"Content-Disposition": 'attachment; filename="catalogo.geojson"'},
     )
 
 
 @app.get("/export.csv")
-def exportar_csv(estado: Estado | None= None, sessao: Session= Depends(get_session)):
+def exportar_csv(
+    estado: Estado | None= None,
+    categoria: str | None= None,
+    min_observacoes: int | None= Query(default=None, ge=1),
+    min_confianca: float | None= Query(default=None, ge=0, le=1),
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    _verificar_categoria(categoria, classes)
     return Response(
-        to_csv(sessao, estado),
+        to_csv(
+            sessao,
+            estado,
+            categoria,
+            min_observacoes=min_observacoes,
+            min_confianca=min_confianca,
+        ),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="catalogo.csv"'},
     )

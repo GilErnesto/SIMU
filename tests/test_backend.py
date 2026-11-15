@@ -55,11 +55,26 @@ def _registo(identificador, caminho_anon="data/anon/a.jpg"):
     )
 
 
-def _criar(sessao, categoria="iluminacao", classe="candeeiro", lon=LON, lat=LAT, identificador="b-1"):
+def _criar(
+    sessao,
+    categoria="iluminacao",
+    classe="candeeiro",
+    lon=LON,
+    lat=LAT,
+    identificador="b-1",
+    observacoes=1,
+    confianca=0.8,
+):
     registo= _registo(identificador)
-    deteccao= Detection(registo.id, categoria, classe, (1, 2, 3, 4), 0.8, False)
+    deteccao= Detection(registo.id, categoria, classe, (1, 2, 3, 4), confianca, False)
     elemento= Element(
-        categoria, classe, lon, lat, False, "monocular", [Observation(deteccao, registo, 10.0)]
+        categoria,
+        classe,
+        lon,
+        lat,
+        False,
+        "monocular",
+        [Observation(deteccao, registo, 10.0) for _ in range(observacoes)],
     )
     write_catalog(sessao, CLASSES, [registo], [elemento])
     return sessao.scalars(select(Elemento).order_by(Elemento.id.desc())).first().id
@@ -96,6 +111,48 @@ def test_listar_com_filtros(cliente, sessao):
     assert [f["properties"]["classe"] for f in luz["features"]] == ["candeeiro"]
     assert cliente.get("/elementos?bbox=10,10,11,11").json()["features"] == []
     assert cliente.get(f"/elementos?bbox={caixa}&estado=validado").json()["features"] == []
+
+
+@precisa_bd
+def test_minimo_de_observacoes(cliente, sessao):
+    caixa= f"{LON - 0.01},{LAT - 0.01},{LON + 0.01},{LAT + 0.01}"
+    _criar(sessao, "iluminacao", "candeeiro", identificador="b-1")
+    _criar(sessao, "sinal", "stop", identificador="b-2", observacoes=3)
+    dois= cliente.get(f"/elementos?bbox={caixa}&min_observacoes=2").json()["features"]
+    assert [f["properties"]["classe"] for f in dois] == ["stop"]
+    assert dois[0]["properties"]["n_observacoes"] == 3
+    todos= cliente.get(f"/elementos?bbox={caixa}&min_observacoes=1").json()["features"]
+    assert len(todos) == 2
+    assert cliente.get(f"/elementos?bbox={caixa}&min_observacoes=4").json()["features"] == []
+
+
+@precisa_bd
+def test_confianca_minima(cliente, sessao):
+    caixa= f"{LON - 0.01},{LAT - 0.01},{LON + 0.01},{LAT + 0.01}"
+    _criar(sessao, "iluminacao", "candeeiro", identificador="b-1", confianca=0.5)
+    _criar(sessao, "sinal", "stop", identificador="b-2", observacoes=3, confianca=0.9)
+    alta= cliente.get(f"/elementos?bbox={caixa}&min_confianca=0.8").json()["features"]
+    assert [f["properties"]["classe"] for f in alta] == ["stop"]
+    media= cliente.get(f"/elementos?bbox={caixa}&min_confianca=0.3").json()["features"]
+    assert len(media) == 2
+
+
+def test_filtros_numericos_invalidos(cliente):
+    assert cliente.get("/elementos?min_observacoes=0").status_code == 422
+    assert cliente.get("/elementos?min_confianca=2").status_code == 422
+    assert cliente.get("/export.geojson?min_confianca=-1").status_code == 422
+    assert cliente.get("/export.geojson?categoria=banco").status_code == 422
+
+
+@precisa_bd
+def test_exportacoes_respeitam_filtros(cliente, sessao):
+    _criar(sessao, "iluminacao", "candeeiro", identificador="b-1", confianca=0.5)
+    _criar(sessao, "sinal", "stop", identificador="b-2", observacoes=3, confianca=0.9)
+    geojson= cliente.get("/export.geojson?min_observacoes=2").json()
+    assert [f["properties"]["classe"] for f in geojson["features"]] == ["stop"]
+    csv= cliente.get("/export.csv?categoria=sinal&min_confianca=0.8").text
+    assert "stop" in csv
+    assert "candeeiro" not in csv
 
 
 @precisa_bd

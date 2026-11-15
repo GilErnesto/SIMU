@@ -1,8 +1,20 @@
 import L from "leaflet";
+import "leaflet.markercluster/dist/MarkerCluster.css";
 import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 
 import { indiceCategoria, percentagem, rotuloClasse, rotuloEstado } from "./rotulos.js";
+
+function iconeGrupo(grupo) {
+  const total= grupo.getChildCount();
+  return L.divIcon({
+    className: "grupo-caixa",
+    html: `<span class="grupo"><span aria-hidden="true">${total}</span><span class="grupo__nome">${total} elementos</span></span>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+}
 
 function icone(indice, estado, ativo) {
   const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}`;
@@ -107,23 +119,25 @@ export default function Mapa({
       <AjustarVista features={features} bbox={config.bbox} />
       <Foco alvo={foco} />
       <EscolherPosicao ativo={modoMover} aoEscolher={aoEscolherPosicao} />
-      {marcadores.map((m) => (
-        <Marker
-          key={m.id}
-          position={m.posicao}
-          icon={m.icone}
-          title={m.titulo}
-          eventHandlers={{
-            click: () => aoSelecionar(m.id, "mapa"),
-            keydown: (evento) => {
-              if (evento.originalEvent.key === "Enter" || evento.originalEvent.key === " ") {
-                evento.originalEvent.preventDefault();
-                aoSelecionar(m.id, "mapa");
-              }
-            },
-          }}
-        />
-      ))}
+      <MarkerClusterGroup iconCreateFunction={iconeGrupo} showCoverageOnHover={false}>
+        {marcadores.map((m) => (
+          <Marker
+            key={m.id}
+            position={m.posicao}
+            icon={m.icone}
+            title={m.titulo}
+            eventHandlers={{
+              click: () => aoSelecionar(m.id, "mapa"),
+              keydown: (evento) => {
+                if (evento.originalEvent.key === "Enter" || evento.originalEvent.key === " ") {
+                  evento.originalEvent.preventDefault();
+                  aoSelecionar(m.id, "mapa");
+                }
+              },
+            }}
+          />
+        ))}
+      </MarkerClusterGroup>
       {posicaoCandidata && (
         <Marker position={posicaoCandidata} icon={ICONE_CANDIDATO} keyboard={false} interactive={false} />
       )}
