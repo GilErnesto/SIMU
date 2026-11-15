@@ -16,6 +16,7 @@ from pipeline.anonymize.egoblur import Anonymizer, caminho_anon, save_anon
 from pipeline.catalog.write import ensure_schema, known_image_ids, write_catalog
 from pipeline.config import load_classes, load_municipio
 from pipeline.detect.infer import Detector
+from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.ingest import mapillary
@@ -79,7 +80,10 @@ def processar(
         else:
             registo.caminho_anon= str(caminho_anon(pasta_anon, registo))
         registo.height, registo.width= anonima.shape[:2]
-        deteccoes= detetor.detect(registo.id, anonima)
+        if registo.camera_type == "spherical":
+            deteccoes= detect_panorama(detetor, registo.id, anonima)
+        else:
+            deteccoes= detetor.detect(registo.id, anonima)
         checkpoint.append(ficheiro_checkpoint, registo, deteccoes)
         resultado[registo.id_fonte]= (registo, deteccoes)
         if n % PASSO_PROGRESSO == 0:
