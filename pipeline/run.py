@@ -25,6 +25,14 @@ def _variavel(nome: str) -> str:
     return valor
 
 
+def _detetor(args: argparse.Namespace, classes):
+    if args.detetor == "yolo":
+        return Detector.from_weights(Path(args.pesos), classes)
+    from pipeline.detect.owl import OwlDetector
+
+    return OwlDetector.load(classes, limiar=args.limiar)
+
+
 def run(args: argparse.Namespace) -> int:
     municipio_path= Path(args.municipio)
     municipio= load_municipio(municipio_path)
@@ -32,7 +40,7 @@ def run(args: argparse.Namespace) -> int:
     token= _variavel("MAPILLARY_TOKEN")
     url_bd= _variavel("DATABASE_URL")
     anonimizador= Anonymizer.from_dir(Path(args.egoblur))
-    detetor= Detector.from_weights(Path(args.pesos), classes)
+    detetor= _detetor(args, classes)
     engine= create_engine(url_bd)
     ensure_schema(engine)
     with Session(engine) as sessao:
@@ -59,6 +67,8 @@ def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.run")
     parser.add_argument("--municipio", required=True, help="ficheiro municipio.yaml")
     parser.add_argument("--fonte", choices=FONTES, default="mapillary")
+    parser.add_argument("--detetor", choices=("owlv2", "yolo"), default="owlv2")
+    parser.add_argument("--limiar", type=float, default=0.2, help="confiança mínima do OWLv2")
     parser.add_argument("--pesos", default="models/detetor.pt", help="pesos YOLO")
     parser.add_argument("--egoblur", default="models/egoblur", help="pasta com os modelos EgoBlur")
     parser.add_argument("--anon-dir", default="data/anon", help="destino das imagens anonimizadas")
