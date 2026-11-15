@@ -62,9 +62,13 @@ def _torchscript_detector(caminho: Path) -> Detector:
     return detetar
 
 
+def caminho_anon(pasta: Path, registo: ImageRecord) -> Path:
+    return pasta / f"{registo.fonte}_{registo.id_fonte}.jpg"
+
+
 def save_anon(image: np.ndarray, pasta: Path, registo: ImageRecord) -> str:
     pasta.mkdir(parents=True, exist_ok=True)
-    caminho= pasta / f"{registo.fonte}_{registo.id_fonte}.jpg"
+    caminho= caminho_anon(pasta, registo)
     if not cv2.imwrite(str(caminho), image):
         raise OSError(f"Não foi possível gravar {caminho}")
     return str(caminho)

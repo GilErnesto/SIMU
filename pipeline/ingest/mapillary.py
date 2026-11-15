@@ -1,4 +1,5 @@
 import math
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
@@ -15,6 +16,9 @@ LICENCA= "CC BY-SA 4.0"
 PASSO_GRAUS= 0.02
 LIMITE_POR_TILE= 2000
 TIMEOUT_S= 30
+TIMEOUT_LIGACAO_S= 10
+TENTATIVAS= 3
+ESPERA_S= 2
 
 
 def tiles(
@@ -86,11 +90,23 @@ def fetch_images(
 
 def download(registo: ImageRecord, sessao: requests.Session | None= None) -> np.ndarray:
     sessao= sessao or requests.Session()
-    try:
-        resposta= sessao.get(registo.url_imagem, timeout=TIMEOUT_S)
-        resposta.raise_for_status()
-    except requests.RequestException as erro:
-        raise ErroPipeline(f"Falha ao descarregar a imagem {registo.id}: {erro}") from erro
+    resposta= None
+    ultimo_erro= None
+    for tentativa in range(TENTATIVAS):
+        try:
+            resposta= sessao.get(registo.url_imagem, timeout=(TIMEOUT_LIGACAO_S, TIMEOUT_S))
+            resposta.raise_for_status()
+            break
+        except requests.RequestException as erro:
+            ultimo_erro= erro
+            resposta= None
+            if tentativa < TENTATIVAS - 1:
+                time.sleep(ESPERA_S * 2**tentativa)
+    if resposta is None:
+        raise ErroPipeline(
+            f"Falha ao descarregar a imagem {registo.id} após {TENTATIVAS} tentativas: "
+            f"{type(ultimo_erro).__name__}"
+        ) from ultimo_erro
     imagem= cv2.imdecode(np.frombuffer(resposta.content, np.uint8), cv2.IMREAD_COLOR)
     if imagem is None:
         raise ErroPipeline(f"Imagem {registo.id} não pôde ser descodificada")

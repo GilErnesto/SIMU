@@ -1,21 +1,29 @@
 import argparse
 import os
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 
+import cv2
+import numpy as np
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from pipeline.anonymize.egoblur import Anonymizer, save_anon
+from pipeline import checkpoint
+from pipeline.anonymize.egoblur import Anonymizer, caminho_anon, save_anon
 from pipeline.catalog.write import ensure_schema, known_image_ids, write_catalog
 from pipeline.config import load_classes, load_municipio
 from pipeline.detect.infer import Detector
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.ingest import mapillary
+from pipeline.models import Detection, ImageRecord
 
 FONTES= ("mapillary",)
+PASSO_PROGRESSO= 25
+NOME_CHECKPOINT= "checkpoint.jsonl"
 
 
 def _variavel(nome: str) -> str:
@@ -33,6 +41,53 @@ def _detetor(args: argparse.Namespace, classes):
     return OwlDetector.load(classes, limiar=args.limiar)
 
 
+def _anonima_em_disco(registo: ImageRecord, pasta_anon: Path) -> np.ndarray | None:
+    caminho= caminho_anon(pasta_anon, registo)
+    if not caminho.is_file():
+        return None
+    return cv2.imread(str(caminho))
+
+
+def processar(
+    imagens: list[ImageRecord],
+    anonimizador: Callable[[np.ndarray], np.ndarray],
+    detetor,
+    pasta_anon: Path,
+    ficheiro_checkpoint: Path,
+    baixar: Callable[[ImageRecord], np.ndarray]= mapillary.download,
+    saida=sys.stderr,
+) -> tuple[dict[str, tuple[ImageRecord, list[Detection]]], list[str]]:
+    guardadas= checkpoint.load(ficheiro_checkpoint)
+    resultado= {}
+    falhas= []
+    inicio= time.time()
+    for n, registo in enumerate(imagens, 1):
+        if registo.id_fonte in guardadas:
+            resultado[registo.id_fonte]= guardadas[registo.id_fonte]
+            continue
+        anonima= _anonima_em_disco(registo, pasta_anon)
+        if anonima is None:
+            try:
+                original= baixar(registo)
+            except ErroPipeline as erro:
+                falhas.append(registo.id_fonte)
+                print(f"Aviso: {erro}", file=saida)
+                continue
+            anonima= anonimizador(original)
+            del original
+            registo.caminho_anon= save_anon(anonima, pasta_anon, registo)
+        else:
+            registo.caminho_anon= str(caminho_anon(pasta_anon, registo))
+        registo.height, registo.width= anonima.shape[:2]
+        deteccoes= detetor.detect(registo.id, anonima)
+        checkpoint.append(ficheiro_checkpoint, registo, deteccoes)
+        resultado[registo.id_fonte]= (registo, deteccoes)
+        if n % PASSO_PROGRESSO == 0:
+            ritmo= n / (time.time() - inicio)
+            print(f"[{n}/{len(imagens)}] {ritmo:.2f} imagens/s, {len(falhas)} falhas", file=saida, flush=True)
+    return resultado, falhas
+
+
 def run(args: argparse.Namespace) -> int:
     municipio_path= Path(args.municipio)
     municipio= load_municipio(municipio_path)
@@ -43,23 +98,25 @@ def run(args: argparse.Namespace) -> int:
     detetor= _detetor(args, classes)
     engine= create_engine(url_bd)
     ensure_schema(engine)
+    pasta_anon= Path(args.anon_dir)
     with Session(engine) as sessao:
         conhecidas= known_image_ids(sessao, args.fonte)
         novas= [
             r for r in mapillary.fetch_images(municipio.bbox, token) if r.id_fonte not in conhecidas
         ]
-        deteccoes= []
-        for registo in novas:
-            original= mapillary.download(registo)
-            anonima= anonimizador(original)
-            del original
-            registo.height, registo.width= anonima.shape[:2]
-            registo.caminho_anon= save_anon(anonima, Path(args.anon_dir), registo)
-            deteccoes.extend(detetor.detect(registo.id, anonima))
-        elementos= locate(novas, deteccoes, municipio, classes)
-        write_catalog(sessao, classes, novas, elementos)
+        feitas, falhas= processar(
+            novas, anonimizador, detetor, pasta_anon, pasta_anon / NOME_CHECKPOINT
+        )
+        imagens= [registo for registo, _ in feitas.values()]
+        deteccoes= [d for _, lista in feitas.values() for d in lista]
+        print("A calcular posições e a escrever o catálogo.", file=sys.stderr, flush=True)
+        elementos= locate(imagens, deteccoes, municipio, classes)
+        write_catalog(sessao, classes, imagens, elementos)
         sessao.commit()
-    print(f"{len(novas)} imagens novas, {len(deteccoes)} deteções, {len(elementos)} elementos.")
+    print(
+        f"{len(imagens)} imagens novas, {len(deteccoes)} deteções, {len(elementos)} elementos, "
+        f"{len(falhas)} imagens ignoradas por falha de rede."
+    )
     return 0
 
 
