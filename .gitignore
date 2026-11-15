@@ -224,3 +224,7 @@ data/raw/
 data/anon/
 data/datasets/
 models/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
