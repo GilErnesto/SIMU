@@ -1,8 +1,8 @@
-# Provisória: substituir pela bbox da zona piloto.
+# Zona piloto: Avenida Dr. Lourenço Peixinho, com 40 m de margem.
 nome: Aveiro
 bbox:
-  lon_min: -8.74
-  lat_min: 40.54
-  lon_max: -8.52
-  lat_max: 40.72
+  lon_min: -8.6522
+  lat_min: 40.6416
+  lon_max: -8.6410
+  lat_max: 40.6445
 crs_metrico: EPSG:3763
