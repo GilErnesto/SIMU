@@ -37,6 +37,7 @@ Modelos necessários, em `models/` (não versionada):
 - `models/egoblur/ego_blur_face.jit` e `models/egoblur/ego_blur_lp.jit`: EgoBlur (rostos e matrículas), pedidos à Meta através do formulário do projeto. Sem eles o pipeline termina com erro e não grava nenhuma imagem.
 - Detetor, à escolha com `--detetor`:
   - `owlv2` (por omissão): OWLv2 zero-shot, local e Apache 2.0. Descarrega o modelo do Hugging Face na primeira utilização e usa a GPU se existir. `--limiar` define a confiança mínima (0,2 por omissão). Não deteta sinais tapados: nunca marca `obstruido`.
+    Funciona em duas fases: o OWLv2 encontra só os três grandes (sinal, candeeiro, contentor de lixo) e o CLIP classifica o tipo no recorte (por exemplo, Stop, cedência, subterrâneo), descartando coisas parecidas (portas, números de porta, letreiros). `--sem-refinar` desliga a segunda fase e `--limiar-classe` define a confiança mínima do tipo. O tipo de cada elemento sai da votação de todas as imagens que o veem.
   - `yolo`: pesos próprios em `models/detetor.pt` (`--pesos`). Treino ainda por fazer.
 
 ## API e interface
