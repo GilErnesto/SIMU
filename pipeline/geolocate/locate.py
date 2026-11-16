@@ -1,5 +1,5 @@
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from itertools import combinations
 
 import numpy as np
@@ -60,6 +60,38 @@ def _candidates(observacoes, origens, altura_m):
     return candidatos
 
 
+MIN_IMAGENS_SECUNDARIA= 2
+FRACAO_SECUNDARIA= 0.4
+
+
+def _repartir(gerais: set[str], observacoes: list[Observation]) -> list[tuple[str, list[Observation]]]:
+    pesos= defaultdict(float)
+    imagens= defaultdict(set)
+    por_imagem= defaultdict(set)
+    for obs in observacoes:
+        classe= obs.detection.class_name
+        if classe in gerais:
+            continue
+        pesos[classe]+= obs.detection.confidence
+        imagens[classe].add(obs.image.id)
+        por_imagem[obs.image.id].add(classe)
+    if not pesos:
+        classe= Counter(o.detection.class_name for o in observacoes).most_common(1)[0][0]
+        return [(classe, list(observacoes))]
+    topo= max(pesos, key=pesos.get)
+    minimo= max(MIN_IMAGENS_SECUNDARIA, math.ceil(FRACAO_SECUNDARIA * len(imagens[topo])))
+    validas= {topo}
+    for classe in pesos:
+        juntas= any(classe in classes and len(classes) > 1 for classes in por_imagem.values())
+        if len(imagens[classe]) >= minimo or juntas:
+            validas.add(classe)
+    grupos= defaultdict(list)
+    for obs in observacoes:
+        classe= obs.detection.class_name
+        grupos[classe if classe in validas else topo].append(obs)
+    return list(grupos.items())
+
+
 def locate(
     images: list[ImageRecord],
     detections: list[Detection],
@@ -71,11 +103,9 @@ def locate(
     para_graus= Transformer.from_crs(municipio.crs_metrico, "EPSG:4326", always_xy=True)
     grupos= defaultdict(list)
     for detecao in detections:
-        grupos[(detecao.category, detecao.class_name)].append(
-            _observe(detecao, por_id[detecao.image_id])
-        )
+        grupos[detecao.category].append(_observe(detecao, por_id[detecao.image_id]))
     elementos= []
-    for (categoria, classe), observacoes in grupos.items():
+    for categoria, observacoes in grupos.items():
         origens= [para_metros.transform(o.image.lon, o.image.lat) for o in observacoes]
         config= classes.categorias[categoria]
         candidatos= _candidates(observacoes, origens, config.altura_m)
@@ -90,15 +120,16 @@ def locate(
             lon, lat= para_graus.transform(x, y)
             triangulado= any(m[2] == "triangulacao" for m in membros)
             incluidas= [observacoes[i] for i in indices]
-            elementos.append(
-                Element(
-                    category=categoria,
-                    class_name=classe,
-                    lon=lon,
-                    lat=lat,
-                    obstruido=all(o.detection.obstruido for o in incluidas),
-                    metodo_geo="triangulacao" if triangulado else "monocular",
-                    observations=incluidas,
+            for classe, da_classe in _repartir(set(config.gerais), incluidas):
+                elementos.append(
+                    Element(
+                        category=categoria,
+                        class_name=classe,
+                        lon=lon,
+                        lat=lat,
+                        obstruido=all(o.detection.obstruido for o in da_classe),
+                        metodo_geo="triangulacao" if triangulado else "monocular",
+                        observations=da_classe,
+                    )
                 )
-            )
     return elementos

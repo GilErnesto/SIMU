@@ -122,3 +122,73 @@ def test_deteccao_longe_demais_e_ignorada():
     x0, y0= _origem_metrica()
     a= _imagem("a", x0, y0, 0)
     assert locate([a], [_deteccao(a, y1=400, y2=401)], MUNICIPIO, CLASSES) == []
+
+
+def _det_com(imagem, categoria, classe, confianca, y1= 300, y2= 500):
+    return Detection(imagem.id, categoria, classe, (480, y1, 520, y2), confianca, False)
+
+
+def _tres_imagens(x0, y0):
+    return [
+        _imagem("a", x0, y0, 45),
+        _imagem("b", x0 + 10, y0, 315),
+        _imagem("c", x0 + 5, y0 - 3, 0),
+    ]
+
+
+def test_classe_do_elemento_sai_da_votacao_das_imagens():
+    x0, y0= _origem_metrica()
+    a, b, c= _tres_imagens(x0, y0)
+    detecoes= [
+        _det_com(a, "sinal", "stop", 0.9),
+        _det_com(b, "sinal", "stop", 0.8),
+        _det_com(c, "sinal", "proibicao", 0.5),
+    ]
+    elementos= locate([a, b, c], detecoes, MUNICIPIO, CLASSES)
+    assert len(elementos) == 1
+    assert elementos[0].class_name == "stop"
+    assert len(elementos[0].observations) == 3
+
+
+def test_classe_geral_junta_se_a_especifica():
+    x0, y0= _origem_metrica()
+    a, b, _= _tres_imagens(x0, y0)
+    detecoes= [_det_com(a, "sinal", "outro", 0.6), _det_com(b, "sinal", "stop", 0.9)]
+    elementos= locate([a, b], detecoes, MUNICIPIO, CLASSES)
+    assert [e.class_name for e in elementos] == ["stop"]
+    assert len(elementos[0].observations) == 2
+
+
+def test_so_classe_geral_fica_por_classificar():
+    x0, y0= _origem_metrica()
+    a, b, _= _tres_imagens(x0, y0)
+    detecoes= [_det_com(a, "residuos", "contentor", 0.6), _det_com(b, "residuos", "contentor", 0.5)]
+    elementos= locate([a, b], detecoes, MUNICIPIO, CLASSES)
+    assert [e.class_name for e in elementos] == ["contentor"]
+
+
+def test_dois_sinais_no_mesmo_poste_ficam_separados():
+    x0, y0= _origem_metrica()
+    a, b, _= _tres_imagens(x0, y0)
+    detecoes= []
+    for imagem in (a, b):
+        detecoes.append(_det_com(imagem, "sinal", "stop", 0.9))
+        detecoes.append(_det_com(imagem, "sinal", "informacao", 0.8))
+    elementos= locate([a, b], detecoes, MUNICIPIO, CLASSES)
+    assert sorted(e.class_name for e in elementos) == ["informacao", "stop"]
+    assert all(len(e.observations) == 2 for e in elementos)
+
+
+def test_classe_isolada_com_pouco_apoio_e_absorvida():
+    x0, y0= _origem_metrica()
+    a, b, c= _tres_imagens(x0, y0)
+    d= _imagem("d", x0 + 5, y0 - 6, 0)
+    detecoes= [
+        _det_com(a, "sinal", "stop", 0.9),
+        _det_com(b, "sinal", "stop", 0.8),
+        _det_com(c, "sinal", "stop", 0.7),
+        _det_com(d, "sinal", "proibicao", 0.6),
+    ]
+    elementos= locate([a, b, c, d], detecoes, MUNICIPIO, CLASSES)
+    assert [e.class_name for e in elementos] == ["stop"]
+    assert len(elementos[0].observations) == 4
