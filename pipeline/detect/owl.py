@@ -25,6 +25,8 @@ class OwlDetector:
             for categoria in classes.categorias.values()
             for classe in categoria.consultas
         ]
+        nomes= list(classes.categorias)
+        self.grupos= [nomes.index(categoria) for categoria, _ in self.alvos]
 
     @classmethod
     def load(cls, classes: Classes, nome: str= MODELO_PADRAO, limiar: float= LIMIAR_PADRAO) -> "OwlDetector":
@@ -54,7 +56,8 @@ class OwlDetector:
         etiquetas= resultado["labels"].cpu()
         if len(scores) == 0:
             return []
-        manter= batched_nms(caixas, scores, etiquetas, IOU_NMS)
+        grupos= torch.tensor([self.grupos[i] for i in etiquetas.tolist()])
+        manter= batched_nms(caixas, scores, grupos, IOU_NMS)
         detecoes= []
         for i in manter.tolist():
             x1, y1, x2, y2= caixas[i].tolist()

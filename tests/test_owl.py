@@ -53,8 +53,8 @@ def _resultado(caixas, scores, etiquetas):
 def test_consultas_cobrem_a_taxonomia():
     detetor= _detetor(_resultado([], [], []))
     classes= {classe for _, classe in detetor.alvos}
-    assert {"stop", "candeeiro", "subterraneo"} <= classes
-    assert "outro" not in classes
+    assert {"outro", "semaforo", "candeeiro", "contentor", "papeleira"} <= classes
+    assert "stop" not in classes
     assert len(detetor.alvos) == len(detetor.textos)
 
 
@@ -93,3 +93,9 @@ def test_nms_remove_sobreposicao_da_mesma_classe():
 def test_sem_resultados():
     detetor= _detetor(_resultado([], [], []))
     assert detetor.detect("img", np.zeros((100, 200, 3), dtype=np.uint8)) == []
+
+
+def test_nms_e_por_categoria():
+    detetor= _detetor(_resultado([[10, 10, 60, 60], [12, 12, 62, 62]], [0.9, 0.5], [0, 1]))
+    assert detetor.alvos[0][0] == detetor.alvos[1][0]
+    assert len(detetor.detect("img", np.zeros((100, 200, 3), dtype=np.uint8))) == 1

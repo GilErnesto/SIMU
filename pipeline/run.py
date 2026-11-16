@@ -39,7 +39,12 @@ def _detetor(args: argparse.Namespace, classes):
         return Detector.from_weights(Path(args.pesos), classes)
     from pipeline.detect.owl import OwlDetector
 
-    return OwlDetector.load(classes, limiar=args.limiar)
+    detetor= OwlDetector.load(classes, limiar=args.limiar)
+    if args.sem_refinar:
+        return detetor
+    from pipeline.detect.refinar import DuasFases, Refinador
+
+    return DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe), classes)
 
 
 def _anonima_em_disco(registo: ImageRecord, pasta_anon: Path) -> np.ndarray | None:
@@ -130,6 +135,8 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--fonte", choices=FONTES, default="mapillary")
     parser.add_argument("--detetor", choices=("owlv2", "yolo"), default="owlv2")
     parser.add_argument("--limiar", type=float, default=0.2, help="confiança mínima do OWLv2")
+    parser.add_argument("--sem-refinar", action="store_true", help="só os três grandes, sem tipo")
+    parser.add_argument("--limiar-classe", type=float, default=0.5, help="confiança mínima do tipo")
     parser.add_argument("--pesos", default="models/detetor.pt", help="pesos YOLO")
     parser.add_argument("--egoblur", default="models/egoblur", help="pasta com os modelos EgoBlur")
     parser.add_argument("--anon-dir", default="data/anon", help="destino das imagens anonimizadas")

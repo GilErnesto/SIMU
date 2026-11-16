@@ -77,7 +77,7 @@ def _iou(a: tuple[float, float, float, float], b, largura: int) -> float:
 def nms(deteccoes: list[Detection], largura: int, iou: float= IOU_NMS) -> list[Detection]:
     por_classe= defaultdict(list)
     for detecao in deteccoes:
-        por_classe[detecao.class_name].append(detecao)
+        por_classe[detecao.category].append(detecao)
     mantidas= []
     for lista in por_classe.values():
         escolhidas= []

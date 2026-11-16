@@ -94,10 +94,17 @@ def test_nms_junta_caixas_na_costura():
     assert mantidas[0].confidence== 0.9
 
 
-def test_nms_nao_junta_classes_diferentes():
+def test_nms_junta_classes_diferentes_da_mesma_categoria():
     a= Detection("i", "sinal", "stop", (100.0, 10.0, 140.0, 50.0), 0.9, False)
     b= Detection("i", "sinal", "proibicao", (100.0, 10.0, 140.0, 50.0), 0.8, False)
-    assert len(nms([a, b], 960))== 2
+    mantidas= nms([a, b], 960)
+    assert [d.class_name for d in mantidas] == ["stop"]
+
+
+def test_nms_nao_junta_categorias_diferentes():
+    a= Detection("i", "sinal", "stop", (100.0, 10.0, 140.0, 50.0), 0.9, False)
+    b= Detection("i", "iluminacao", "candeeiro", (100.0, 10.0, 140.0, 50.0), 0.8, False)
+    assert len(nms([a, b], 960)) == 2
 
 
 @pytest.mark.parametrize(("camera_type", "esperado"), [("spherical", 6), ("perspective", 1)])

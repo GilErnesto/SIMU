@@ -1,5 +1,8 @@
 # Alturas aproximadas em metros: afinar com medições.
-# consultas: texto em inglês usado pelo detetor zero-shot (OWLv2).
+# gerais: classes de recurso, que o passo 2 tenta tornar mais específicas.
+# consultas: texto em inglês do passo 1 (OWLv2), só os três grandes.
+# descricoes: textos em inglês do passo 2 (CLIP), um ou vários por tipo.
+# negativos: textos de coisas parecidas que não contam: a deteção é descartada.
 # rotulo e rotulos: nomes mostrados na interface.
 categorias:
   sinal:
@@ -15,6 +18,9 @@ categorias:
       - perigo
       - obrigacao
       - informacao
+      - semaforo
+      - outro
+    gerais:
       - outro
     rotulos:
       stop: Stop
@@ -24,18 +30,48 @@ categorias:
       perigo: Perigo
       obrigacao: Obrigação
       informacao: Informação
-      outro: Outro sinal
+      semaforo: Semáforo
+      outro: Sinal por classificar
     superclasse:
       limite_velocidade: proibicao
     superclasse_padrao: outro
     consultas:
-      stop: a red octagonal stop sign
-      cedencia: a triangular give way sign pointing down
-      limite_velocidade: a round speed limit sign
-      proibicao: a round road sign with a red border
-      perigo: a triangular warning road sign with a red border
-      obrigacao: a round blue road sign
-      informacao: a rectangular blue road sign
+      outro: a traffic sign
+      semaforo: a traffic light
+    descricoes:
+      stop:
+        - a red octagonal STOP sign
+      cedencia:
+        - a triangular give way sign with a red border pointing downwards
+        - an inverted triangle road sign with a red border
+      limite_velocidade:
+        - a round speed limit sign, white with a red border and a number
+        - a round sign with a red ring and a black number inside
+      proibicao:
+        - a round prohibition sign with a red border
+        - a red disc with a white horizontal bar
+      perigo:
+        - a triangular warning sign with a red border and a black symbol
+      obrigacao:
+        - a round blue mandatory sign with a white arrow
+        - a round blue sign with a white symbol
+      informacao:
+        - a blue square sign with a white letter P, parking
+        - a blue square sign with a white triangle and a person, pedestrian crossing
+        - a rectangular blue direction sign with white text and an arrow
+      semaforo:
+        - a traffic light
+        - a pedestrian traffic light
+    negativos:
+      - a house number plate
+      - a rectangular grey or white plate with a number on a wall
+      - a number painted on the asphalt
+      - a door or a window
+      - a tree branch or a bare pole
+      - a satellite dish or an antenna
+      - a shop sign or a banner with text
+      - a green shop sign
+      - a car or a truck
   iluminacao:
     rotulo: Iluminação
     raio_dedup_m: 5
@@ -54,11 +90,36 @@ categorias:
       - subterraneo
       - ilha_reciclagem
       - indiferenciado
+      - papeleira
+      - contentor
+    gerais:
+      - contentor
     rotulos:
       subterraneo: Contentor subterrâneo
       ilha_reciclagem: Ilha de reciclagem
       indiferenciado: Contentor de indiferenciados
+      papeleira: Papeleira
+      contentor: Contentor por classificar
     consultas:
-      subterraneo: an underground waste container
-      ilha_reciclagem: a recycling container
-      indiferenciado: a general waste bin
+      contentor: a waste container
+      papeleira: a litter bin
+    descricoes:
+      subterraneo:
+        - an underground waste container, only a small metal column or hatch is visible on the pavement
+        - a metal waste loading column on the pavement
+      ilha_reciclagem:
+        - a recycling station with blue, yellow and green recycling bins
+        - several colored recycling containers side by side
+      indiferenciado:
+        - a large dark wheeled waste bin standing on the street
+        - a big green or grey waste container with wheels
+      papeleira:
+        - a small litter bin on a post or on the pavement
+        - a small round public trash can
+    negativos:
+      - a door or a cabinet on a wall
+      - a concrete pillar or a bollard
+      - a grey concrete block or a planter
+      - a plastic lid or a piece of plastic on the ground
+      - a car or a truck
+      - a bench

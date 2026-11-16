@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -25,6 +25,9 @@ class Categoria:
     consultas: dict[str, str]
     rotulo: str
     rotulos: dict[str, str]
+    gerais: tuple[str, ...]= ()
+    descricoes: dict[str, str | list[str]]= field(default_factory=dict)
+    negativos: tuple[str, ...]= ()
 
 
 @dataclass(frozen=True)
@@ -77,6 +80,9 @@ def load_classes(path: Path) -> Classes:
                 consultas=dict(campos.get("consultas", {})),
                 rotulo=str(campos.get("rotulo", nome)),
                 rotulos=dict(campos.get("rotulos", {})),
+                gerais=tuple(campos.get("gerais", ())),
+                descricoes=dict(campos.get("descricoes", {})),
+                negativos=tuple(campos.get("negativos", ())),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro
