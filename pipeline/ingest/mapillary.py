@@ -13,7 +13,7 @@ from pipeline.models import ImageRecord
 URL= "https://graph.mapillary.com/images"
 CAMPOS= "id,computed_geometry,computed_compass_angle,camera_type,captured_at,creator,thumb_2048_url"
 LICENCA= "CC BY-SA 4.0"
-PASSO_GRAUS= 0.02
+PASSO_GRAUS= 0.002
 LIMITE_POR_TILE= 2000
 TIMEOUT_S= 30
 TIMEOUT_LIGACAO_S= 10
