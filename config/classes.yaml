@@ -4,11 +4,13 @@
 # descricoes: textos em inglês do passo 2 (CLIP), um ou vários por tipo.
 # negativos: textos de coisas parecidas que não contam: a deteção é descartada.
 # rotulo e rotulos: nomes mostrados na interface.
+# limiar_detecao: confiança mínima de uma deteção, por categoria.
 categorias:
   sinal:
     rotulo: Sinais
     raio_dedup_m: 5
     altura_m: 0.7
+    limiar_detecao: 0.3
     limiar_especifica: 0.5
     classes:
       - stop
@@ -76,6 +78,7 @@ categorias:
     rotulo: Iluminação
     raio_dedup_m: 5
     altura_m: 8
+    limiar_detecao: 0.3
     classes:
       - candeeiro
     rotulos:
@@ -86,6 +89,7 @@ categorias:
     rotulo: Resíduos
     raio_dedup_m: 10
     altura_m: 1.2
+    limiar_detecao: 0.3
     classes:
       - subterraneo
       - ilha_reciclagem

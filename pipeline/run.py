@@ -17,7 +17,7 @@ from pipeline.anonymize.egoblur import Anonymizer, caminho_anon, save_anon
 from pipeline.catalog import analises
 from pipeline.catalog.write import anon_paths, ensure_schema, known_image_ids, write_catalog
 from pipeline.config import load_classes, load_municipio
-from pipeline.detect.infer import Detector
+from pipeline.detect.infer import Detector, Limiares
 from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
@@ -27,6 +27,7 @@ from pipeline.models import Detection, ImageRecord
 FONTES= ("mapillary",)
 PASSO_PROGRESSO= 25
 NOME_CHECKPOINT= "checkpoint.jsonl"
+CABECA_SINAL= "models/tipo_sinal.npz"
 
 
 def _variavel(nome: str) -> str:
@@ -36,17 +37,26 @@ def _variavel(nome: str) -> str:
     return valor
 
 
-def _detetor(args: argparse.Namespace, classes):
-    if args.detetor == "yolo":
-        return Detector.from_weights(Path(args.pesos), classes)
-    from pipeline.detect.owl import OwlDetector
+def tipo_de_detetor(args: argparse.Namespace) -> str:
+    if args.detetor == "auto":
+        return "yolo" if Path(args.pesos).exists() else "owlv2"
+    return args.detetor
 
-    detetor= OwlDetector.load(classes, limiar=args.limiar)
-    if args.sem_refinar:
-        return detetor
-    from pipeline.detect.refinar import DuasFases, Refinador
 
-    return DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe), classes)
+def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
+    if tipo_de_detetor(args) == "yolo":
+        detetor= Detector.from_weights(Path(args.pesos), classes, limiar=args.limiar)
+    else:
+        from pipeline.detect.owl import OwlDetector
+
+        detetor= OwlDetector.load(classes, limiar=args.limiar)
+    if not args.sem_refinar:
+        from pipeline.detect.refinar import DuasFases, Refinador
+
+        cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
+        cabecas= {"sinal": cabeca} if cabeca.exists() else {}
+        detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas), classes)
+    return Limiares(detetor, classes) if limiares else detetor
 
 
 def _anonima_em_disco(registo: ImageRecord, pasta_anon: Path) -> np.ndarray | None:
@@ -198,10 +208,11 @@ def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.run")
     parser.add_argument("--municipio", required=True, help="ficheiro municipio.yaml")
     parser.add_argument("--fonte", choices=FONTES, default="mapillary")
-    parser.add_argument("--detetor", choices=("owlv2", "yolo"), default="owlv2")
+    parser.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
     parser.add_argument("--limiar", type=float, default=0.2, help="confiança mínima do OWLv2")
     parser.add_argument("--sem-refinar", action="store_true", help="só os três grandes, sem tipo")
-    parser.add_argument("--limiar-classe", type=float, default=0.5, help="confiança mínima do tipo")
+    parser.add_argument("--limiar-classe", type=float, default=0.3, help="confiança mínima do tipo")
+    parser.add_argument("--cabeca-sinal", default=CABECA_SINAL, help="classificador do tipo de sinal, se existir")
     parser.add_argument("--pesos", default="models/detetor.pt", help="pesos YOLO")
     parser.add_argument("--egoblur", default="models/egoblur", help="pasta com os modelos EgoBlur")
     parser.add_argument("--anon-dir", default="data/anon", help="destino das imagens anonimizadas")

@@ -28,6 +28,7 @@ class Categoria:
     gerais: tuple[str, ...]= ()
     descricoes: dict[str, str | list[str]]= field(default_factory=dict)
     negativos: tuple[str, ...]= ()
+    limiar_detecao: float= 0.0
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,7 @@ def load_classes(path: Path) -> Classes:
                 gerais=tuple(campos.get("gerais", ())),
                 descricoes=dict(campos.get("descricoes", {})),
                 negativos=tuple(campos.get("negativos", ())),
+                limiar_detecao=float(campos.get("limiar_detecao", 0.0)),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

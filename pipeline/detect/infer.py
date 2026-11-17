@@ -19,21 +19,35 @@ def resolve(nome: str, confianca: float, classes: Classes) -> tuple[str, str, bo
     return categoria.nome, destino, True
 
 
-class Detector:
-    def __init__(self, modelo, classes: Classes):
-        self.modelo= modelo
+class Limiares:
+    def __init__(self, detetor, classes: Classes):
+        self.detetor= detetor
         self.classes= classes
 
+    def detect(self, image_id: str, image: np.ndarray) -> list[Detection]:
+        return [
+            d
+            for d in self.detetor.detect(image_id, image)
+            if d.confidence >= self.classes.categorias[d.category].limiar_detecao
+        ]
+
+
+class Detector:
+    def __init__(self, modelo, classes: Classes, limiar: float= 0.25):
+        self.modelo= modelo
+        self.classes= classes
+        self.limiar= limiar
+
     @classmethod
-    def from_weights(cls, pesos: Path, classes: Classes) -> "Detector":
+    def from_weights(cls, pesos: Path, classes: Classes, limiar: float= 0.25) -> "Detector":
         if not pesos.exists():
             raise ModeloEmFalta(f"Pesos do detetor em falta: {pesos}")
         from ultralytics import YOLO
 
-        return cls(YOLO(str(pesos)), classes)
+        return cls(YOLO(str(pesos)), classes, limiar)
 
     def detect(self, image_id: str, image: np.ndarray) -> list[Detection]:
-        resultado= self.modelo(image, verbose=False)[0]
+        resultado= self.modelo(image, verbose=False, conf=self.limiar)[0]
         nomes= resultado.names
         caixas= resultado.boxes
         detecoes= []
