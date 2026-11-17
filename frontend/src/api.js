@@ -66,6 +66,7 @@ export function enviarAnalise({ ficheiros, nome, offsetS, fps }, aoProgredir) {
     pedido.upload.onprogress= (evento) => {
       if (evento.lengthComputable) aoProgredir(evento.loaded / evento.total);
     };
+    pedido.upload.onload= () => aoProgredir(1);
     pedido.onerror= () =>
       rejeitar(new Error("Não foi possível enviar os ficheiros. Confirme que o servidor está a correr."));
     pedido.onload= () => {

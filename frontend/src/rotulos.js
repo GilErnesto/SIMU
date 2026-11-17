@@ -69,6 +69,21 @@ export function formatarDataHora(texto) {
   return data.toLocaleString("pt-PT", { dateStyle: "medium", timeStyle: "short" });
 }
 
+export function segundosDesde(texto) {
+  const instante= Date.parse(texto);
+  if (Number.isNaN(instante)) return 0;
+  return Math.max(0, Math.floor((Date.now() - instante) / 1000));
+}
+
+export function formatarEspera(segundos) {
+  if (segundos < 90) return `${segundos} s`;
+  const minutos= Math.round(segundos / 60);
+  if (minutos < 60) return `${minutos} min`;
+  const horas= Math.floor(minutos / 60);
+  const resto= minutos % 60;
+  return resto === 0 ? `${horas} h` : `${horas} h ${resto} min`;
+}
+
 export function formatarTamanho(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(Math.round(bytes / 1024), 1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

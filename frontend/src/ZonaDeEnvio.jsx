@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import { enviarAnalise } from "./api.js";
+import Barra from "./Barra.jsx";
 import { chaveDe, ficheirosDoArrasto, resumir, tipoDe } from "./ficheiros.js";
 import { formatarTamanho, lerNumero } from "./rotulos.js";
 
@@ -194,12 +195,15 @@ export default function ZonaDeEnvio({ aoEnviar }) {
             </button>
           </div>
           {analisaveis === 0 && <p className="nota">Falta pelo menos uma imagem ou um vídeo.</p>}
-          {aEnviar && (
-            <div className="progresso" role="status">
-              <progress value={progresso} max={1} aria-label="Progresso do envio" />
-              <span>{Math.round(progresso * 100)}%</span>
-            </div>
+          {aEnviar && progresso < 1 && (
+            <Barra
+              rotulo="Progresso do envio"
+              valor={progresso}
+              maximo={1}
+              texto={`A enviar, ${Math.round(progresso * 100)}%`}
+            />
           )}
+          {aEnviar && progresso >= 1 && <Barra rotulo="Envio concluído" texto="A guardar os ficheiros no servidor" />}
 
           <ul className="selecionados__lista">
             {ficheiros.slice(0, MOSTRADOS).map((ficheiro) => (

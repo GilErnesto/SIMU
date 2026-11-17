@@ -14,6 +14,7 @@ import Filtros, { FILTROS_VAZIOS, contarFiltros } from "./Filtros.jsx";
 import Fotos from "./Fotos.jsx";
 import ListaElementos from "./ListaElementos.jsx";
 import Mapa from "./Mapa.jsx";
+import ProgressoDaAnalise from "./ProgressoDaAnalise.jsx";
 import { Ligacao } from "./rota.js";
 import { ESTADOS_ANALISE, analiseEmCurso, lerNumero } from "./rotulos.js";
 
@@ -56,17 +57,12 @@ function EstadoDaAnalise({ analise }) {
   return (
     <main className="estado-analise">
       <h2 className="painel__titulo">{falhou ? "A análise falhou" : "A análise está em curso"}</h2>
-      {analise.estado === "na_fila" && (
-        <p>À espera da vez. Pode fechar esta página: a análise continua e fica na lista da página inicial.</p>
-      )}
-      {analise.estado === "a_processar" && (
-        <>
-          <div className="progresso" role="status">
-            <progress value={analise.feitas} max={Math.max(analise.total, 1)} aria-label="Progresso da análise" />
-            <span>{analise.total > 0 ? `Imagem ${analise.feitas} de ${analise.total}` : "A preparar os ficheiros"}</span>
-          </div>
-          <p>Esta página atualiza-se sozinha. Pode voltar ao início e enviar outra análise entretanto.</p>
-        </>
+      <ProgressoDaAnalise analise={analise} />
+      {analiseEmCurso(analise) && (
+        <p>
+          Esta página atualiza-se sozinha. Pode fechá-la ou voltar ao início e enviar outra análise: a análise
+          continua e fica na lista da página inicial.
+        </p>
       )}
       {falhou && <p className="mensagem--erro">{analise.erro || "Sem detalhe do erro."}</p>}
       <Avisos avisos={analise.avisos} />

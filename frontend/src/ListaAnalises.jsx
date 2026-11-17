@@ -1,22 +1,15 @@
 import { useEffect, useState } from "react";
 
 import { listarAnalises } from "./api.js";
+import ProgressoDaAnalise from "./ProgressoDaAnalise.jsx";
 import { Ligacao } from "./rota.js";
 import { ESTADOS_ANALISE, analiseEmCurso, formatarDataHora } from "./rotulos.js";
 
 const INTERVALO_MS= 3000;
 
 function Detalhe({ analise }) {
-  if (analise.estado === "na_fila") {
-    return <p className="analise-item__meta">À espera da vez. Pode fechar esta página, a análise continua.</p>;
-  }
-  if (analise.estado === "a_processar") {
-    return (
-      <div className="progresso" role="status">
-        <progress value={analise.feitas} max={Math.max(analise.total, 1)} aria-label="Progresso da análise" />
-        <span>{analise.total > 0 ? `Imagem ${analise.feitas} de ${analise.total}` : "A preparar os ficheiros"}</span>
-      </div>
-    );
+  if (analiseEmCurso(analise)) {
+    return <ProgressoDaAnalise analise={analise} />;
   }
   if (analise.estado === "falhou") {
     return <p className="analise-item__meta mensagem--erro">{analise.erro || "A análise falhou."}</p>;
