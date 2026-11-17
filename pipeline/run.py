@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import os
 import sys
 import time
@@ -13,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from pipeline import checkpoint
 from pipeline.anonymize.egoblur import Anonymizer, caminho_anon, save_anon
-from pipeline.catalog.write import ensure_schema, known_image_ids, write_catalog
+from pipeline.catalog import analises
+from pipeline.catalog.write import anon_paths, ensure_schema, known_image_ids, write_catalog
 from pipeline.config import load_classes, load_municipio
 from pipeline.detect.infer import Detector
 from pipeline.detect.panorama import detect_panorama
@@ -62,12 +64,15 @@ def processar(
     ficheiro_checkpoint: Path,
     baixar: Callable[[ImageRecord], np.ndarray]= mapillary.download,
     saida=sys.stderr,
+    ao_progredir: Callable[[int, int], None] | None= None,
 ) -> tuple[dict[str, tuple[ImageRecord, list[Detection]]], list[str]]:
     guardadas= checkpoint.load(ficheiro_checkpoint)
     resultado= {}
     falhas= []
     inicio= time.time()
     for n, registo in enumerate(imagens, 1):
+        if ao_progredir is not None:
+            ao_progredir(n - 1, len(imagens))
         if registo.id_fonte in guardadas:
             resultado[registo.id_fonte]= guardadas[registo.id_fonte]
             continue
@@ -94,7 +99,61 @@ def processar(
         if n % PASSO_PROGRESSO == 0:
             ritmo= n / (time.time() - inicio)
             print(f"[{n}/{len(imagens)}] {ritmo:.2f} imagens/s, {len(falhas)} falhas", file=saida, flush=True)
+    if ao_progredir is not None:
+        ao_progredir(len(imagens), len(imagens))
     return resultado, falhas
+
+
+def regenerar(
+    registadas: dict[str, str],
+    listadas: list[ImageRecord],
+    anonimizador: Callable[[np.ndarray], np.ndarray],
+    pasta_anon: Path,
+    baixar: Callable[[ImageRecord], np.ndarray]= mapillary.download,
+    saida=sys.stderr,
+) -> tuple[int, int]:
+    em_falta= sorted(
+        id_fonte
+        for id_fonte, caminho in registadas.items()
+        if not (pasta_anon / Path(caminho).name).is_file()
+    )
+    por_id= {registo.id_fonte: registo for registo in listadas}
+    regeneradas= 0
+    indisponiveis= 0
+    for n, id_fonte in enumerate(em_falta, 1):
+        registo= por_id.get(id_fonte)
+        if registo is None:
+            indisponiveis+= 1
+            continue
+        try:
+            original= baixar(registo)
+        except ErroPipeline as erro:
+            indisponiveis+= 1
+            print(f"Aviso: {erro}", file=saida)
+            continue
+        save_anon(anonimizador(original), pasta_anon, registo)
+        del original
+        regeneradas+= 1
+        if n % PASSO_PROGRESSO == 0:
+            print(f"[{n}/{len(em_falta)}] imagens regeneradas", file=saida, flush=True)
+    return regeneradas, indisponiveis
+
+
+def _regenerar(args, municipio, token: str, anonimizador, engine, pasta_anon: Path) -> int:
+    with Session(engine) as sessao:
+        registadas= anon_paths(sessao, args.fonte)
+    listadas= mapillary.fetch_images(municipio.bbox, token)
+    regeneradas, indisponiveis= regenerar(registadas, listadas, anonimizador, pasta_anon)
+    print(
+        f"{regeneradas} imagens regeneradas, {indisponiveis} indisponíveis "
+        "(fora da zona ou removidas do Mapillary)."
+    )
+    return 0
+
+
+def _token_da_zona(municipio) -> str:
+    resumo= hashlib.sha1(repr(municipio.bbox).encode()).hexdigest()[:8]
+    return f"zona-{resumo}"
 
 
 def run(args: argparse.Namespace) -> int:
@@ -104,11 +163,16 @@ def run(args: argparse.Namespace) -> int:
     token= _variavel("MAPILLARY_TOKEN")
     url_bd= _variavel("DATABASE_URL")
     anonimizador= Anonymizer.from_dir(Path(args.egoblur))
-    detetor= _detetor(args, classes)
     engine= create_engine(url_bd)
     ensure_schema(engine)
     pasta_anon= Path(args.anon_dir)
+    if args.regenerar_imagens:
+        return _regenerar(args, municipio, token, anonimizador, engine, pasta_anon)
+    detetor= _detetor(args, classes)
     with Session(engine) as sessao:
+        analise= analises.criar_ou_obter(
+            sessao, _token_da_zona(municipio), f"{args.fonte.capitalize()}, {municipio.nome}"
+        )
         conhecidas= known_image_ids(sessao, args.fonte)
         novas= [
             r for r in mapillary.fetch_images(municipio.bbox, token) if r.id_fonte not in conhecidas
@@ -120,8 +184,9 @@ def run(args: argparse.Namespace) -> int:
         deteccoes= [d for _, lista in feitas.values() for d in lista]
         print("A calcular posições e a escrever o catálogo.", file=sys.stderr, flush=True)
         elementos= locate(imagens, deteccoes, municipio, classes)
-        write_catalog(sessao, classes, imagens, elementos)
+        write_catalog(sessao, classes, imagens, elementos, analise_id=analise.id)
         sessao.commit()
+        analises.atualizar_contagens(sessao, analise)
     print(
         f"{len(imagens)} imagens novas, {len(deteccoes)} deteções, {len(elementos)} elementos, "
         f"{len(falhas)} imagens ignoradas por falha de rede."
@@ -140,6 +205,11 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--pesos", default="models/detetor.pt", help="pesos YOLO")
     parser.add_argument("--egoblur", default="models/egoblur", help="pasta com os modelos EgoBlur")
     parser.add_argument("--anon-dir", default="data/anon", help="destino das imagens anonimizadas")
+    parser.add_argument(
+        "--regenerar-imagens",
+        action="store_true",
+        help="voltar a criar as imagens anonimizadas em falta, sem alterar a base",
+    )
     args= parser.parse_args(argv)
     load_dotenv()
     try:
