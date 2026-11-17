@@ -38,6 +38,11 @@ function AjustarTamanho({ vista }) {
   useEffect(() => {
     mapa.invalidateSize();
   }, [mapa, vista]);
+  useEffect(() => {
+    const observador= new ResizeObserver(() => mapa.invalidateSize());
+    observador.observe(mapa.getContainer());
+    return () => observador.disconnect();
+  }, [mapa]);
   return null;
 }
 

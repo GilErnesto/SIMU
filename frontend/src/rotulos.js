@@ -14,6 +14,14 @@ export const FONTES= {
   mapillary: "Mapillary",
   kartaview: "KartaView",
   video: "Vídeo",
+  upload: "Ficheiro enviado",
+};
+
+export const ESTADOS_ANALISE= {
+  na_fila: "Na fila",
+  a_processar: "A analisar",
+  concluida: "Concluída",
+  falhou: "Falhou",
 };
 
 export function rotuloEstado(estado) {
@@ -48,4 +56,21 @@ export function formatarData(texto) {
   const data= new Date(texto);
   if (Number.isNaN(data.getTime())) return "data desconhecida";
   return data.toLocaleDateString("pt-PT", { year: "numeric", month: "long", day: "numeric" });
+}
+
+export function analiseEmCurso(analise) {
+  return analise?.estado === "na_fila" || analise?.estado === "a_processar";
+}
+
+export function formatarDataHora(texto) {
+  if (!texto) return "";
+  const data= new Date(texto);
+  if (Number.isNaN(data.getTime())) return "";
+  return data.toLocaleString("pt-PT", { dateStyle: "medium", timeStyle: "short" });
+}
+
+export function formatarTamanho(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.max(Math.round(bytes / 1024), 1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }

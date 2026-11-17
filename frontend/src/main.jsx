@@ -1,13 +1,14 @@
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
+import "./layout.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import App from "./App.jsx";
+import Raiz from "./Raiz.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <App />
+    <Raiz />
   </StrictMode>,
 );

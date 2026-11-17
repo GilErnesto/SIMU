@@ -31,7 +31,7 @@ function Legenda({ config }) {
   );
 }
 
-function Estado({ lista, aoRepetir, aoLimpar, temFiltros }) {
+function Estado({ lista, aoRepetir, aoLimpar, temFiltros, vazia }) {
   if (lista.estado === "a-carregar") {
     return <p className="mensagem">A carregar elementos.</p>;
   }
@@ -56,19 +56,21 @@ function Estado({ lista, aoRepetir, aoLimpar, temFiltros }) {
     );
   }
   if (lista.features.length === 0) {
-    return (
-      <div className="mensagem">
-        <p>O catálogo está vazio.</p>
-        <p>
-          Corra <code>python -m pipeline.run --municipio config/municipio.yaml</code> para o preencher.
-        </p>
-      </div>
-    );
+    return <p className="mensagem">{vazia}</p>;
   }
   return null;
 }
 
-export default function Lista({ config, lista, selecionadoId, temFiltros, aoSelecionar, aoRepetir, aoLimpar }) {
+export default function ListaElementos({
+  config,
+  lista,
+  selecionadoId,
+  temFiltros,
+  vazia,
+  aoSelecionar,
+  aoRepetir,
+  aoLimpar,
+}) {
   const visiveis= lista.features.slice(0, LIMITE);
   return (
     <section className="lista" aria-labelledby="titulo-lista" id="lista">
@@ -76,7 +78,7 @@ export default function Lista({ config, lista, selecionadoId, temFiltros, aoSele
         Elementos
         {lista.estado === "ok" && <span className="painel__contagem"> ({lista.features.length})</span>}
       </h2>
-      <Estado lista={lista} aoRepetir={aoRepetir} aoLimpar={aoLimpar} temFiltros={temFiltros} />
+      <Estado lista={lista} aoRepetir={aoRepetir} aoLimpar={aoLimpar} temFiltros={temFiltros} vazia={vazia} />
       {lista.estado === "ok" && visiveis.length > 0 && (
         <ul className="lista__itens">
           {visiveis.map((feature) => {
