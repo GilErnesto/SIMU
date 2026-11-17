@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import os
 import statistics
@@ -57,8 +58,8 @@ def amostrar(registos: list[ImageRecord], maximo: int | None) -> list[ImageRecor
     ordenados= sorted(registos, key=lambda r: r.id_fonte)
     if maximo is None or len(ordenados) <= maximo:
         return ordenados
-    passo= len(ordenados) / maximo
-    return [ordenados[int(i * passo)] for i in range(maximo)]
+    escolhidas= sorted(ordenados, key=lambda r: hashlib.sha1(r.id_fonte.encode()).hexdigest())[:maximo]
+    return sorted(escolhidas, key=lambda r: r.id_fonte)
 
 
 def imagens_do_mapillary(
@@ -155,7 +156,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--sem-refinar", action="store_true")
     parser.add_argument("--anon-dir", help="por omissão data/anon (catálogo) ou data/avaliacao/imagens")
     parser.add_argument("--fonte", choices=("catalogo", "mapillary"), default="catalogo")
-    parser.add_argument("--max-imagens", type=int, help="amostra regular das imagens do Mapillary")
+    parser.add_argument("--max-imagens", type=int, help="amostra estável das imagens do Mapillary")
     parser.add_argument("--classes", default="config/classes.yaml")
     parser.add_argument("--egoblur", default="models/egoblur")
     parser.add_argument("--resultados", default="data/avaliacao")

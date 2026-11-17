@@ -135,3 +135,17 @@ Notas para ler a tabela:
 - O lixo é o ponto fraco do YOLO: recall de 22%, contra 40% do OWLv2. As papeleiras quase não aparecem (recall de 5%); o Vistas tem poucos exemplos de "trash-can".
 - O limiar de deteção de 0,3 não melhorou o F do sinal na zona de teste (0,50 com e 0,51 sem): ajudou no Rossio, mas não aqui.
 - Uma única corrida por configuração e uma única zona de teste: diferenças de poucos pontos não são significativas.
+- **As linhas desta tabela não usam as mesmas imagens.** A amostra "regular" de 400 escolhia uma imagem a cada `n/400` da listagem do Mapillary, e a listagem muda de uma corrida para outra (mesmo com minutos de intervalo): duas corridas seguidas tinham só 43 de 400 imagens em comum, e a mesma configuração deu F de resíduos 0,37 numa e 0,26 na outra. A amostra passou a escolher as 400 imagens com menor hash do id, o que a mantém estável (400 de 400 em comum entre corridas).
+
+### Limiares de deteção do YOLO (17 de novembro)
+
+Afinação no Rossio (400 imagens, YOLO com limiar bruto 0,1, um limiar `limiar_detecao` igual para todas as categorias, de 0,1 a 0,6): as curvas de F são quase planas. Melhor F do sinal a 0,10–0,15 (0,58 contra 0,55 a 0,3), da iluminação a 0,35 (0,56 contra 0,53), dos resíduos a 0,3 (0,56).
+
+Medição única na zona de teste, sobre a mesma amostra estável de 400 imagens:
+
+| Limiares | Sinal (P/R) | Luz (P/R) | Lixo (P/R) | Tipo de sinal certo |
+|---|---|---|---|---|
+| 0,3 em todas (atual) | 0,43 / 0,48 | 0,43 / 0,63 | 0,36 / 0,27 | 54% (64 de 119) |
+| sinal 0,15, luz 0,35, lixo 0,3 | 0,43 / 0,51 | 0,45 / 0,63 | 0,36 / 0,27 | 52% (66 de 128) |
+
+Ganho de 0,01 a 0,02 no F, que no sinal exigiria também baixar o limiar bruto do worker. Os limiares ficam em 0,3.

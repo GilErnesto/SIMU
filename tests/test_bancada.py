@@ -26,11 +26,17 @@ def test_elementos_geojson_usa_a_formula_de_confianca_do_catalogo():
     assert propriedades["confianca"] == element_confidence(0.7, 2)
 
 
-def test_amostrar_e_regular_e_estavel():
-    registos= [_imagem(f"{n:03d}") for n in range(10)]
-    assert [r.id_fonte for r in amostrar(registos, 5)] == ["000", "002", "004", "006", "008"]
-    assert len(amostrar(registos, None)) == 10
-    assert len(amostrar(registos, 50)) == 10
+def test_amostrar_e_estavel_quando_a_listagem_muda():
+    registos= [_imagem(f"{n:03d}") for n in range(100)]
+    escolhidas= {r.id_fonte for r in amostrar(registos, 20)}
+    assert len(escolhidas) == 20
+    assert {r.id_fonte for r in amostrar(list(reversed(registos)), 20)} == escolhidas
+    fora= next(r for r in registos if r.id_fonte not in escolhidas)
+    assert {r.id_fonte for r in amostrar([r for r in registos if r is not fora], 20)} == escolhidas
+    com_nova= {r.id_fonte for r in amostrar([*registos, _imagem("000a")], 20)}
+    assert len(com_nova & escolhidas) >= 19
+    assert len(amostrar(registos[:10], None)) == 10
+    assert len(amostrar(registos[:10], 50)) == 10
 
 
 def test_imagens_do_mapillary_grava_so_anonimizadas(tmp_path):
