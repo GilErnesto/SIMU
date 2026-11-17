@@ -1,0 +1,10 @@
+dados: data/datasets/grandes.yaml
+modelo: yolo11s.pt
+epocas: 25
+tempo: 2.5
+imgsz: 1024
+lote: 6
+paciencia: 6
+trabalhadores: 4
+nome: grandes
+destino: models/detetor.pt

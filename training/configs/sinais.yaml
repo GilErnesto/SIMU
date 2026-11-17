@@ -1,0 +1,9 @@
+# MTSD é CC BY-NC-SA: só uso não comercial.
+# Dataset: python -m training.datasets.mtsd --origem <pasta>
+dados: data/datasets/mtsd/data.yaml
+modelo: yolo11s.pt
+epocas: 60
+imgsz: 1280
+lote: 4
+nome: sinais
+destino: models/sinais.pt

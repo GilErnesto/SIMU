@@ -27,7 +27,7 @@ api= ["fastapi", "uvicorn", "python-multipart"]
 dev= ["pytest", "ruff", "httpx"]
 
 [tool.setuptools.packages.find]
-include= ["pipeline*", "backend*"]
+include= ["pipeline*", "backend*", "training*"]
 
 [tool.ruff]
 line-length= 100
