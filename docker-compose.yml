@@ -49,6 +49,50 @@ services:
       retries: 10
       start_period: 10s
 
+  worker:
+    build:
+      context: .
+      dockerfile: pipeline/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    cpus: ${WORKER_CPUS:-4}
+    mem_limit: ${WORKER_MEM:-8g}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      OMP_NUM_THREADS: ${WORKER_CPUS:-4}
+      MKL_NUM_THREADS: ${WORKER_CPUS:-4}
+    command:
+      - python
+      - -m
+      - pipeline.worker
+      - --municipio=/app/config/municipio.yaml
+      - --egoblur=/app/models/egoblur
+      - --pesos=/app/models/detetor.pt
+      - --cabeca-sinal=/app/models/tipo_sinal.npz
+      - --raw-dir=/app/data/raw
+      - --anon-dir=/app/data/anon
+    volumes:
+      - ./config:/app/config:ro
+      - ${HF_CACHE:-hfcache}:/hf
+      - type: bind
+        source: ./models
+        target: /app/models
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/anon
+        target: /app/data/anon
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./data/raw
+        target: /app/data/raw
+        bind:
+          create_host_path: false
+
   frontend:
     build: ./frontend
     restart: unless-stopped
@@ -60,3 +104,4 @@ services:
 
 volumes:
   pgdata:
+  hfcache:

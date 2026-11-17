@@ -1,0 +1,12 @@
+services:
+  worker:
+    build:
+      args:
+        TORCH_INDEX: ""
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

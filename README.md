@@ -48,21 +48,18 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Antes, cria as pastas de dados com o teu utilizador: `mkdir -p data/anon data/raw`.
+Antes, cria as pastas com o teu utilizador: `mkdir -p models data/anon data/raw`.
 
-Arranca a base de dados, a API e a interface (SIMU). Abre `http://localhost:8080`. A API fica em `http://localhost:8010` (documentação em `/docs`). As portas mudam-se com `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. Tudo escuta só em `127.0.0.1`.
+Arranca a base de dados, a API, a interface (SIMU) e o worker que analisa os envios. Abre `http://localhost:8080`. A API fica em `http://localhost:8010` (documentação em `/docs`). As portas mudam-se com `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. Tudo escuta só em `127.0.0.1`.
 
 - A API lê `./config` e serve imagens de `./data/anon`, ambos só de leitura. Cria `data/anon` antes (`mkdir -p data/anon`): se não existir, o `docker compose up` falha em vez de a criar como `root`, o que impediria o pipeline de escrever nela.
 - `data/anon` é uma cache das imagens anonimizadas que o catálogo mostra. Se a apagares por engano, `python -m pipeline.run --municipio config/municipio.yaml --regenerar-imagens` volta a criar as que faltam, sem alterar a base.
-- A interface recebe as fotografias, os vídeos e o GPX, mas quem os analisa é o **worker**, que corre fora do Docker porque usa a GPU:
-
-  ```bash
-  python -m pipeline.worker
-  ```
-
-  Fica a aguardar análises na fila (precisa do `.env`, dos modelos em `models/` e de `pip install -e ".[ml]"`). Cada análise tem um endereço próprio, `http://localhost:8080/a/<código>`. Enquanto o worker não estiver a correr, as análises ficam "Na fila".
+- A interface recebe as fotografias, os vídeos e o GPX, e quem os analisa é o **worker**, que arranca com o resto. Precisa dos modelos em `./models` (EgoBlur em `models/egoblur/`, e `detetor.pt` e `tipo_sinal.npz` se existirem; sem `detetor.pt` usa o OWLv2). Cada análise tem um endereço próprio, `http://localhost:8080/a/<código>`. Enquanto o worker não estiver a correr, as análises ficam "Na fila", e a interface avisa quando isso demora.
+- **No Docker o worker usa o CPU**, porque o Docker não vê a GPU sem o `nvidia-container-toolkit`. Medi cerca de 30 segundos por imagem com 4 núcleos (quase tudo é a anonimização), contra cerca de 1 segundo na GPU: serve para umas poucas fotografias, não para centenas. `WORKER_CPUS` e `WORKER_MEM` no `.env` limitam o que ele usa.
+- **Para usar a GPU**, instala o `nvidia-container-toolkit` e arranca com `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build` (a imagem passa a ter o PyTorch com CUDA; esta variante não foi testada). Em alternativa, corre o worker no teu ambiente, com `python -m pipeline.worker` (precisa de `pip install -e ".[ml]"`), e pára o do Docker com `docker compose stop worker`.
+- A primeira análise descarrega o CLIP (1,7 GB) para a cache do Hugging Face. Define `HF_CACHE` no `.env` com o caminho da cache que já tens (`~/.cache/huggingface`) para o reutilizar.
 - Os ficheiros enviados ficam em `data/raw/<código>/` (nunca servida pela API) só até a análise acabar bem; depois são apagados. Em caso de falha ficam, para se poder tentar de novo. Só a versão anonimizada vai para `data/anon/`.
-- Fotografias precisam de GPS (e, de preferência, direção) no EXIF. Se faltar a direção, deduz-se a partir das fotografias vizinhas. Cada vídeo precisa de um GPX gravado ao mesmo tempo, com o mesmo nome ou como único par; o início do vídeo é assumido igual ao início do GPX, com um desfasamento opcional.
+- As fotografias devem ter GPS e, de preferência, direção no EXIF. Se faltar a direção, deduz-se a partir das fotografias vizinhas. **Sem GPS (ou sem direção que se consiga deduzir), a fotografia é analisada na mesma**: os elementos aparecem na lista, com o aviso "GPS indisponível", mas sem posição no mapa. O técnico pode indicar a posição de cada um ao avaliá-lo. Cada vídeo precisa de um GPX gravado ao mesmo tempo, com o mesmo nome ou como único par; o início do vídeo é assumido igual ao início do GPX, com um desfasamento opcional.
 - O pipeline do Mapillary (`python -m pipeline.run ...`) continua a existir e aparece como uma análise própria, uma por zona.
 - Para parar: `docker compose down`. Os dados ficam no volume `pgdata`; `docker compose down -v` apaga-os.
 - A palavra-passe da base entra num URL: evita caracteres como `@`, `/` e `:`.
