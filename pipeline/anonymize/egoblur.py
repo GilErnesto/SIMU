@@ -10,6 +10,7 @@ from pipeline.models import ImageRecord
 MODELOS= ("ego_blur_face.jit", "ego_blur_lp.jit")
 LIMIAR_SCORE= 0.9
 LIMIAR_NMS= 0.3
+FOLGA_FP16= 0.05
 
 Detector= Callable[[np.ndarray], np.ndarray]
 
@@ -50,14 +51,17 @@ def _torchscript_detector(caminho: Path) -> Detector:
 
     dispositivo= "cuda" if torch.cuda.is_available() else "cpu"
     modelo= torch.jit.load(str(caminho), map_location="cpu").to(dispositivo).eval()
+    meia= dispositivo == "cuda"
+    limiar= LIMIAR_SCORE - FOLGA_FP16 if meia else LIMIAR_SCORE
 
     def detetar(image: np.ndarray) -> np.ndarray:
         tensor= torch.from_numpy(np.transpose(image, (2, 0, 1)).copy()).to(dispositivo)
-        with torch.no_grad():
+        with torch.no_grad(), torch.autocast("cuda", enabled=meia):
             caixas, _, scores, _= modelo(tensor)
+        caixas, scores= caixas.float(), scores.float()
         manter= nms(caixas, scores, LIMIAR_NMS)
         caixas, scores= caixas[manter], scores[manter]
-        return caixas[scores > LIMIAR_SCORE].cpu().numpy()
+        return caixas[scores > limiar].cpu().numpy()
 
     return detetar
 
