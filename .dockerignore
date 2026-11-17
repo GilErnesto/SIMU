@@ -1,0 +1,13 @@
+.git
+.claude
+.venv
+venv
+.env
+data
+models
+docs
+tests
+frontend
+__pycache__
+.pytest_cache
+.ruff_cache
