@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import numpy as np
@@ -250,3 +251,32 @@ def test_localizavel_precisa_de_posicao_e_direcao():
     assert _imagem_ponto("a", -8.65, 40.64, 10.0).localizavel
     assert not _imagem_ponto("a", None, None, 10.0).localizavel
     assert not _imagem_ponto("a", -8.65, 40.64, None).localizavel
+
+
+def _rumo_para(origem, alvo):
+    return math.degrees(math.atan2(alvo[0] - origem[0], alvo[1] - origem[1])) % 360
+
+
+def _caixa_para(imagem, origem, alvo):
+    relativo= (_rumo_para(origem, alvo) - imagem.heading + 180) % 360 - 180
+    centro= (relativo / 65 + 0.5) * imagem.width
+    return Detection(imagem.id, "iluminacao", "candeeiro", (centro - 20, 300, centro + 20, 500), 0.9, False)
+
+
+def test_cada_raio_fica_num_so_candeeiro_de_uma_fila():
+    x0, y0= _origem_metrica()
+    candeeiros= [(x0 + 4, y0 + 14), (x0 + 12, y0 + 14)]
+    meio= (x0 + 8, y0 + 14)
+    imagens= []
+    detecoes= []
+    for nome, dx in (("a", 0), ("b", 8), ("c", 16)):
+        origem= (x0 + dx, y0)
+        imagem= _imagem(nome, *origem, _rumo_para(origem, meio))
+        imagens.append(imagem)
+        detecoes.extend(_caixa_para(imagem, origem, alvo) for alvo in candeeiros)
+    elementos= locate(imagens, detecoes, MUNICIPIO, CLASSES)
+    assert len(elementos) == 2
+    assert sorted(len(e.observations) for e in elementos) == [3, 3]
+    posicoes= sorted(PARA_METROS.transform(e.lon, e.lat) for e in elementos)
+    for obtida, esperada in zip(posicoes, sorted(candeeiros), strict=True):
+        assert obtida == pytest.approx(esperada, abs=1.5)

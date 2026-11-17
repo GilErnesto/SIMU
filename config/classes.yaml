@@ -76,7 +76,7 @@ categorias:
       - a car or a truck
   iluminacao:
     rotulo: Iluminação
-    raio_dedup_m: 5
+    raio_dedup_m: 6.5
     altura_m: 8
     limiar_detecao: 0.3
     classes:
