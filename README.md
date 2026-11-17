@@ -40,6 +40,32 @@ Modelos necessários, em `models/` (não versionada):
     Funciona em duas fases: o OWLv2 encontra só os três grandes (sinal, candeeiro, contentor de lixo) e o CLIP classifica o tipo no recorte (por exemplo, Stop, cedência, subterrâneo), descartando coisas parecidas (portas, números de porta, letreiros). `--sem-refinar` desliga a segunda fase e `--limiar-classe` define a confiança mínima do tipo. O tipo de cada elemento sai da votação de todas as imagens que o veem.
   - `yolo`: pesos próprios em `models/detetor.pt` (`--pesos`). Treino ainda por fazer.
 
+## Tudo de uma vez com Docker
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Antes, cria as pastas de dados com o teu utilizador: `mkdir -p data/anon data/raw`.
+
+Arranca a base de dados, a API e a interface (SIMU). Abre `http://localhost:8080`. A API fica em `http://localhost:8010` (documentação em `/docs`). As portas mudam-se com `FRONTEND_PORT`, `BACKEND_PORT` e `POSTGRES_PORT` no `.env`. Tudo escuta só em `127.0.0.1`.
+
+- A API lê `./config` e serve imagens de `./data/anon`, ambos só de leitura. Cria `data/anon` antes (`mkdir -p data/anon`): se não existir, o `docker compose up` falha em vez de a criar como `root`, o que impediria o pipeline de escrever nela.
+- `data/anon` é uma cache das imagens anonimizadas que o catálogo mostra. Se a apagares por engano, `python -m pipeline.run --municipio config/municipio.yaml --regenerar-imagens` volta a criar as que faltam, sem alterar a base.
+- A interface recebe as fotografias, os vídeos e o GPX, mas quem os analisa é o **worker**, que corre fora do Docker porque usa a GPU:
+
+  ```bash
+  python -m pipeline.worker
+  ```
+
+  Fica a aguardar análises na fila (precisa do `.env`, dos modelos em `models/` e de `pip install -e ".[ml]"`). Cada análise tem um endereço próprio, `http://localhost:8080/a/<código>`. Enquanto o worker não estiver a correr, as análises ficam "Na fila".
+- Os ficheiros enviados ficam em `data/raw/<código>/` (nunca servida pela API) só até a análise acabar bem; depois são apagados. Em caso de falha ficam, para se poder tentar de novo. Só a versão anonimizada vai para `data/anon/`.
+- Fotografias precisam de GPS (e, de preferência, direção) no EXIF. Se faltar a direção, deduz-se a partir das fotografias vizinhas. Cada vídeo precisa de um GPX gravado ao mesmo tempo, com o mesmo nome ou como único par; o início do vídeo é assumido igual ao início do GPX, com um desfasamento opcional.
+- O pipeline do Mapillary (`python -m pipeline.run ...`) continua a existir e aparece como uma análise própria, uma por zona.
+- Para parar: `docker compose down`. Os dados ficam no volume `pgdata`; `docker compose down -v` apaga-os.
+- A palavra-passe da base entra num URL: evita caracteres como `@`, `/` e `:`.
+
 ## API e interface
 
 ```bash
