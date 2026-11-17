@@ -693,11 +693,42 @@
   position: absolute;
   inset: auto var(--espaco-3) var(--espaco-3) var(--espaco-3);
   z-index: 1200;
-  margin: 0;
-  padding: var(--espaco-3);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espaco-2);
+  padding: var(--espaco-3) var(--espaco-3) var(--espaco-3) var(--espaco-4);
   font-size: 0.9375rem;
-  color: var(--tinta);
-  background: var(--painel);
-  border: 1px solid var(--controlo);
+  color: #ffffff;
+  background: #5b21b6;
+  border: 1px solid #ddd6fe;
   border-radius: var(--raio);
+}
+
+.mapa__aviso p {
+  flex: 1;
+  margin: 0;
+}
+
+.mapa__aviso button {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  margin: calc(-1 * var(--espaco-3)) calc(-1 * var(--espaco-3)) calc(-1 * var(--espaco-3)) 0;
+  padding: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: #ffffff;
+  background: transparent;
+  border: 0;
+  border-radius: var(--raio);
+  cursor: pointer;
+}
+
+.mapa__aviso button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mapa__aviso button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: -3px;
 }
