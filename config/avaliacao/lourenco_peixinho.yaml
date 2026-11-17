@@ -1,0 +1,8 @@
+# Zona de teste: não usar para afinar limiares.
+nome: Aveiro
+bbox:
+  lon_min: -8.6535
+  lat_min: 40.6405
+  lon_max: -8.6435
+  lat_max: 40.6450
+crs_metrico: EPSG:3763
