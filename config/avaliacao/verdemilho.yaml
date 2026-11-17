@@ -1,0 +1,8 @@
+# Segunda zona de teste (Verdemilho, Av. Europa): não usar para afinar limiares.
+nome: Aveiro
+bbox:
+  lon_min: -8.6600
+  lat_min: 40.6170
+  lon_max: -8.6400
+  lat_max: 40.6270
+crs_metrico: EPSG:3763
