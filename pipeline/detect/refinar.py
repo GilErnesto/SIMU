@@ -1,11 +1,13 @@
 import math
 from collections import defaultdict
 from dataclasses import replace
+from pathlib import Path
 
 import cv2
 import numpy as np
 
 from pipeline.config import Classes
+from pipeline.detect.cabeca import Cabeca
 from pipeline.models import Detection
 
 MODELO_PADRAO= "openai/clip-vit-large-patch14"
@@ -39,11 +41,20 @@ def _opcoes(categoria) -> tuple[list[str | None], list[str]]:
 
 
 class Refinador:
-    def __init__(self, processor, modelo, classes: Classes, limiar: float= LIMIAR_CLASSE, dispositivo: str= "cpu"):
+    def __init__(
+        self,
+        processor,
+        modelo,
+        classes: Classes,
+        limiar: float= LIMIAR_CLASSE,
+        dispositivo: str= "cpu",
+        cabecas: dict[str, Cabeca] | None= None,
+    ):
         self.processor= processor
         self.modelo= modelo
         self.limiar= limiar
         self.dispositivo= dispositivo
+        self.cabecas= cabecas or {}
         self.opcoes= {
             categoria.nome: _opcoes(categoria)
             for categoria in classes.categorias.values()
@@ -51,14 +62,21 @@ class Refinador:
         }
 
     @classmethod
-    def load(cls, classes: Classes, nome: str= MODELO_PADRAO, limiar: float= LIMIAR_CLASSE) -> "Refinador":
+    def load(
+        cls,
+        classes: Classes,
+        nome: str= MODELO_PADRAO,
+        limiar: float= LIMIAR_CLASSE,
+        cabecas: dict[str, Path] | None= None,
+    ) -> "Refinador":
         import torch
         from transformers import CLIPModel, CLIPProcessor
 
         dispositivo= "cuda" if torch.cuda.is_available() else "cpu"
         processor= CLIPProcessor.from_pretrained(nome)
         modelo= CLIPModel.from_pretrained(nome).to(dispositivo).eval()
-        return cls(processor, modelo, classes, limiar, dispositivo)
+        carregadas= {categoria: Cabeca.carregar(caminho) for categoria, caminho in (cabecas or {}).items()}
+        return cls(processor, modelo, classes, limiar, dispositivo, carregadas)
 
     def classificar(self, categoria: str, recortes: list[np.ndarray]) -> list[tuple[str | None, float]]:
         import torch
@@ -70,13 +88,18 @@ class Refinador:
         with torch.no_grad():
             saida= self.modelo(**entradas)
         probabilidades= saida.logits_per_image.softmax(dim=-1).cpu().tolist()
+        cabeca= self.cabecas.get(categoria)
+        tipos= cabeca.prever(saida.image_embeds.cpu().numpy()) if cabeca is not None else None
         previstas= []
-        for linha in probabilidades:
+        for i, linha in enumerate(probabilidades):
             somas= defaultdict(float)
             for classe, probabilidade in zip(ids, linha, strict=True):
                 somas[classe]+= probabilidade
             melhor= max(somas, key=somas.get)
-            previstas.append((melhor, somas[melhor]))
+            if tipos is not None and melhor is not None:
+                previstas.append(tipos[i])
+            else:
+                previstas.append((melhor, somas[melhor]))
         return previstas
 
 

@@ -1,0 +1,8 @@
+# Zona de onde vêm os exemplos de treino do tipo de sinal.
+nome: Aveiro
+bbox:
+  lon_min: -8.690
+  lat_min: 40.615
+  lon_max: -8.630
+  lat_max: 40.655
+crs_metrico: EPSG:3763
