@@ -16,6 +16,7 @@ from sqlalchemy import (
     func,
     select,
     text,
+    update,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
@@ -28,6 +29,24 @@ PESO_OBSERVACOES= 0.25
 
 class Base(DeclarativeBase):
     pass
+
+
+class Analise(Base):
+    __tablename__= "analise"
+
+    id: Mapped[int]= mapped_column(primary_key=True)
+    token: Mapped[str]= mapped_column(String(32), unique=True)
+    nome: Mapped[str]= mapped_column(String(128))
+    estado: Mapped[str]= mapped_column(String(16), default="na_fila")
+    total: Mapped[int]= mapped_column(Integer, default=0)
+    feitas: Mapped[int]= mapped_column(Integer, default=0)
+    n_elementos: Mapped[int]= mapped_column(Integer, default=0)
+    avisos= mapped_column(JSON, default=list)
+    erro: Mapped[str | None]= mapped_column(Text)
+    parametros= mapped_column(JSON, default=dict)
+    criada_em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
+    iniciada_em: Mapped[datetime | None]= mapped_column(DateTime(timezone=True))
+    concluida_em: Mapped[datetime | None]= mapped_column(DateTime(timezone=True))
 
 
 class Imagem(Base):
@@ -45,6 +64,7 @@ class Imagem(Base):
     heading: Mapped[float | None]= mapped_column(Float)
     camera_type: Mapped[str | None]= mapped_column(String(16))
     caminho_anon: Mapped[str | None]= mapped_column(String(512))
+    analise_id: Mapped[int | None]= mapped_column(ForeignKey("analise.id"), index=True)
 
 
 class Elemento(Base):
@@ -66,6 +86,7 @@ class Elemento(Base):
     atualizado_em: Mapped[datetime]= mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    analise_id: Mapped[int | None]= mapped_column(ForeignKey("analise.id"), index=True)
     observacoes: Mapped[list["Observacao"]]= relationship(back_populates="elemento")
 
 
@@ -99,6 +120,39 @@ def ensure_schema(engine: Engine) -> None:
     with engine.begin() as conexao:
         conexao.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
     Base.metadata.create_all(engine)
+    with engine.begin() as conexao:
+        for tabela in ("imagem", "elemento"):
+            conexao.execute(
+                text(f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS analise_id integer REFERENCES analise(id)")
+            )
+            conexao.execute(
+                text(f"CREATE INDEX IF NOT EXISTS ix_{tabela}_analise_id ON {tabela} (analise_id)")
+            )
+    with Session(engine) as sessao:
+        atribuir_analise_inicial(sessao)
+        sessao.commit()
+
+
+def atribuir_analise_inicial(sessao: Session) -> None:
+    imagens= sessao.scalar(select(func.count(Imagem.id)).where(Imagem.analise_id.is_(None)))
+    elementos= sessao.scalar(select(func.count(Elemento.id)).where(Elemento.analise_id.is_(None)))
+    if not imagens and not elementos:
+        return
+    analise= sessao.scalar(select(Analise).where(Analise.token == "inicial"))
+    if analise is None:
+        analise= Analise(
+            token="inicial", nome="Catálogo anterior", estado="concluida", avisos=[], parametros={}
+        )
+        sessao.add(analise)
+        sessao.flush()
+    sessao.execute(update(Imagem).where(Imagem.analise_id.is_(None)).values(analise_id=analise.id))
+    sessao.execute(update(Elemento).where(Elemento.analise_id.is_(None)).values(analise_id=analise.id))
+    analise.total= sessao.scalar(select(func.count(Imagem.id)).where(Imagem.analise_id == analise.id))
+    analise.feitas= analise.total
+    analise.n_elementos= sessao.scalar(
+        select(func.count(Elemento.id)).where(Elemento.analise_id == analise.id)
+    )
+    sessao.flush()
 
 
 def element_confidence(media: float, n_observacoes: int) -> float:
@@ -110,17 +164,27 @@ def known_image_ids(session: Session, fonte: str) -> set[str]:
     return set(session.scalars(select(Imagem.id_fonte).where(Imagem.fonte == fonte)))
 
 
+def anon_paths(session: Session, fonte: str) -> dict[str, str]:
+    consulta= select(Imagem.id_fonte, Imagem.caminho_anon).where(
+        Imagem.fonte == fonte, Imagem.caminho_anon.is_not(None)
+    )
+    return {id_fonte: caminho for id_fonte, caminho in session.execute(consulta)}
+
+
 def _ponto(lon: float, lat: float) -> WKTElement:
     return WKTElement(f"POINT({lon} {lat})", srid=4326)
 
 
-def _vizinho(session: Session, elemento: Element, raio_m: float) -> Elemento | None:
+def _vizinho(
+    session: Session, elemento: Element, raio_m: float, analise_id: int | None= None
+) -> Elemento | None:
     alvo= cast(_ponto(elemento.lon, elemento.lat), Geography)
     distancia= cast(Elemento.geom, Geography)
     consulta= (
         select(Elemento)
         .where(
             Elemento.classe == elemento.class_name,
+            Elemento.analise_id.is_(None) if analise_id is None else Elemento.analise_id == analise_id,
             func.ST_DWithin(distancia, alvo, raio_m),
         )
         .order_by(func.ST_Distance(distancia, alvo))
@@ -140,7 +204,11 @@ def _refresh(session: Session, elemento: Elemento) -> None:
 
 
 def write_catalog(
-    session: Session, classes: Classes, images: list[ImageRecord], elements: list[Element]
+    session: Session,
+    classes: Classes,
+    images: list[ImageRecord],
+    elements: list[Element],
+    analise_id: int | None= None,
 ) -> None:
     imagens= {}
     for registo in images:
@@ -155,13 +223,14 @@ def write_catalog(
             heading=registo.heading,
             camera_type=registo.camera_type,
             caminho_anon=registo.caminho_anon,
+            analise_id=analise_id,
         )
         session.add(linha)
         imagens[registo.id]= linha
     session.flush()
     for elemento in elements:
         raio= classes.categorias[elemento.category].raio_dedup_m
-        linha= _vizinho(session, elemento, raio)
+        linha= _vizinho(session, elemento, raio, analise_id)
         if linha is None:
             linha= Elemento(
                 categoria=elemento.category,
@@ -171,6 +240,7 @@ def write_catalog(
                 obstruido=elemento.obstruido,
                 metodo_geo=elemento.metodo_geo,
                 n_observacoes=0,
+                analise_id=analise_id,
             )
             session.add(linha)
             session.flush()

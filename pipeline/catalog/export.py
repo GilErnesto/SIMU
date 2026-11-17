@@ -43,6 +43,8 @@ def _carregar(
     bbox: tuple[float, float, float, float] | None= None,
     min_observacoes: int | None= None,
     min_confianca: float | None= None,
+    analise_id: int | None= None,
+    classe: str | None= None,
 ) -> list[Elemento]:
     consulta= select(Elemento).options(
         selectinload(Elemento.observacoes).selectinload(Observacao.imagem)
@@ -59,6 +61,10 @@ def _carregar(
         consulta= consulta.where(Elemento.n_observacoes >= min_observacoes)
     if min_confianca is not None:
         consulta= consulta.where(Elemento.confianca >= min_confianca)
+    if analise_id is not None:
+        consulta= consulta.where(Elemento.analise_id == analise_id)
+    if classe is not None:
+        consulta= consulta.where(Elemento.classe == classe)
     return list(session.scalars(consulta.order_by(Elemento.id)))
 
 
@@ -88,12 +94,16 @@ def to_geojson(
     bbox: tuple[float, float, float, float] | None= None,
     min_observacoes: int | None= None,
     min_confianca: float | None= None,
+    analise_id: int | None= None,
+    classe: str | None= None,
 ) -> dict:
     return {
         "type": "FeatureCollection",
         "features": [
             to_feature(e)
-            for e in _carregar(session, estado, categoria, bbox, min_observacoes, min_confianca)
+            for e in _carregar(
+                session, estado, categoria, bbox, min_observacoes, min_confianca, analise_id, classe
+            )
         ],
     }
 
@@ -104,11 +114,15 @@ def to_csv(
     categoria: str | None= None,
     min_observacoes: int | None= None,
     min_confianca: float | None= None,
+    analise_id: int | None= None,
+    classe: str | None= None,
 ) -> str:
     saida= io.StringIO()
     escritor= csv.DictWriter(saida, fieldnames=COLUNAS_CSV)
     escritor.writeheader()
-    for elemento in _carregar(session, estado, categoria, None, min_observacoes, min_confianca):
+    for elemento in _carregar(
+        session, estado, categoria, None, min_observacoes, min_confianca, analise_id, classe
+    ):
         feature= to_feature(elemento)
         propriedades= feature["properties"]
         lon, lat= feature["geometry"]["coordinates"]
