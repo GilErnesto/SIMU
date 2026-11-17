@@ -688,16 +688,3 @@
     line-height: 1.2;
   }
 }
-
-.mapa__aviso {
-  position: absolute;
-  inset: auto var(--espaco-3) var(--espaco-3) var(--espaco-3);
-  z-index: 1200;
-  margin: 0;
-  padding: var(--espaco-3);
-  font-size: 0.9375rem;
-  color: var(--tinta);
-  background: var(--painel);
-  border: 1px solid var(--controlo);
-  border-radius: var(--raio);
-}

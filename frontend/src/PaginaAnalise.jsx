@@ -397,12 +397,6 @@ export default function PaginaAnalise({ token }) {
                 aoSelecionar={selecionar}
                 aoEscolherPosicao={(lat, lon) => setCandidata({ lat: lat.toFixed(6), lon: lon.toFixed(6) })}
               />
-              {lista.estado === "ok" && lista.features.length > 0 && !lista.features.some((f) => f.geometry) && (
-                <p className="mapa__aviso" role="status">
-                  Nenhum elemento tem posição, porque as fotografias não têm GPS. A lista e as fotografias continuam
-                  disponíveis, e pode indicar a posição de cada elemento ao avaliá-lo.
-                </p>
-              )}
             </section>
             <Divisor valor={fotosPct} aoMudar={mudarDivisao} />
             <Fotos

@@ -542,13 +542,14 @@ select {
 }
 
 .foto__moldura-fora {
-  stroke: #000000;
-  stroke-width: 5px;
+  stroke: #ffffff;
+  stroke-width: 9px;
 }
 
 .foto__moldura {
-  stroke: #ffffff;
-  stroke-width: 2px;
+  fill: rgba(213, 0, 249, 0.18);
+  stroke: #d500f9;
+  stroke-width: 5px;
 }
 
 .foto__falta {
