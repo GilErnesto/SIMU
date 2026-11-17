@@ -26,9 +26,10 @@ export default function Avaliar({
   const p= dados.properties;
   const classe= escolhida ?? p.classe;
   const classes= config.categorias[p.categoria]?.classes ?? [];
-  const [lon, lat]= dados.geometry.coordinates;
-  const campoLat= candidata ? candidata.lat : lat.toFixed(6);
-  const campoLon= candidata ? candidata.lon : lon.toFixed(6);
+  const semPosicao= !dados.geometry;
+  const [lon, lat]= semPosicao ? [null, null] : dados.geometry.coordinates;
+  const campoLat= candidata ? candidata.lat : lat === null ? "" : lat.toFixed(6);
+  const campoLon= candidata ? candidata.lon : lon === null ? "" : lon.toFixed(6);
 
   useEffect(() => {
     titulo.current?.focus();
@@ -129,8 +130,14 @@ export default function Avaliar({
 
       <section className="bloco" aria-labelledby="titulo-posicao">
         <h3 id="titulo-posicao" className="bloco__titulo">
-          Corrigir a posição
+          {semPosicao ? "Indicar a posição" : "Corrigir a posição"}
         </h3>
+        {semPosicao && (
+          <p className="nota">
+            Este elemento não tem posição porque a fotografia não tem GPS. Escreva as coordenadas ou escolha o ponto no
+            mapa.
+          </p>
+        )}
         <div className="campos-par">
           <div className="campo">
             <label htmlFor="lat">Latitude</label>

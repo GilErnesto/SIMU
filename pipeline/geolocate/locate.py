@@ -60,6 +60,21 @@ def _candidates(observacoes, origens, altura_m):
     return candidatos
 
 
+SEM_POSICAO= "sem_posicao"
+
+
+def _sem_posicao(detecao: Detection, imagem: ImageRecord) -> Element:
+    return Element(
+        category=detecao.category,
+        class_name=detecao.class_name,
+        lon=None,
+        lat=None,
+        obstruido=detecao.obstruido,
+        metodo_geo=SEM_POSICAO,
+        observations=[Observation(detecao, imagem, None)],
+    )
+
+
 MIN_IMAGENS_SECUNDARIA= 2
 FRACAO_SECUNDARIA= 0.4
 
@@ -102,9 +117,13 @@ def locate(
     para_metros= Transformer.from_crs("EPSG:4326", municipio.crs_metrico, always_xy=True)
     para_graus= Transformer.from_crs(municipio.crs_metrico, "EPSG:4326", always_xy=True)
     grupos= defaultdict(list)
-    for detecao in detections:
-        grupos[detecao.category].append(_observe(detecao, por_id[detecao.image_id]))
     elementos= []
+    for detecao in detections:
+        imagem= por_id[detecao.image_id]
+        if imagem.localizavel:
+            grupos[detecao.category].append(_observe(detecao, imagem))
+        else:
+            elementos.append(_sem_posicao(detecao, imagem))
     for categoria, observacoes in grupos.items():
         origens= [para_metros.transform(o.image.lon, o.image.lat) for o in observacoes]
         config= classes.categorias[categoria]

@@ -126,15 +126,43 @@ def test_posicao_do_elemento_e_a_do_ponto_triangulado(tmp_path, sessao):
 
 
 def test_sem_imagens_utilizaveis_falha_e_guarda_os_ficheiros(tmp_path, sessao):
-    analise= analises.criar(sessao, "Sem GPS")
+    analise= analises.criar(sessao, "Só GPX")
     pasta= tmp_path / "raw" / analise.token
     pasta.mkdir(parents=True)
-    Image.new("RGB", (32, 32)).save(pasta / "0001_x.jpg")
+    (pasta / "0001_x.gpx").write_text("<gpx/>")
     assert _executar(tmp_path, sessao, analise) is False
     assert analise.estado == "falhou"
     assert "Nenhuma imagem utilizável" in analise.erro
-    assert any("sem GPS" in a for a in analise.avisos)
     assert pasta.exists()
+
+
+def test_foto_sem_gps_e_analisada_com_aviso_e_elementos_sem_posicao(tmp_path, sessao):
+    analise= analises.criar(sessao, "Sem GPS")
+    pasta= tmp_path / "raw" / analise.token
+    pasta.mkdir(parents=True)
+    Image.new("RGB", (200, 100), (90, 90, 90)).save(pasta / "0001_sinais.jpg")
+    assert _executar(tmp_path, sessao, analise) is True
+    assert analise.estado == "concluida"
+    assert any("GPS indisponível" in a and "sinais.jpg" in a for a in analise.avisos)
+    elemento= sessao.scalar(select(Elemento).where(Elemento.analise_id == analise.id))
+    assert elemento.geom is None
+    assert elemento.metodo_geo == "sem_posicao"
+    assert elemento.classe == "candeeiro"
+    imagem= sessao.scalar(select(Imagem).where(Imagem.analise_id == analise.id))
+    assert imagem.geom is None
+    assert Path(imagem.caminho_anon).exists()
+    assert not pasta.exists()
+
+
+def test_fotos_com_e_sem_gps_na_mesma_analise(tmp_path, sessao):
+    analise, pasta= _preparar(
+        tmp_path, sessao, [("0001_a.jpg", X0, Y0, 45.0), ("0002_b.jpg", X0 + 10, Y0, 315.0)]
+    )
+    Image.new("RGB", (200, 100), (90, 90, 90)).save(pasta / "0003_c.jpg")
+    assert _executar(tmp_path, sessao, analise) is True
+    elementos= list(sessao.scalars(select(Elemento).where(Elemento.analise_id == analise.id)))
+    assert sorted(e.metodo_geo for e in elementos) == ["sem_posicao", "triangulacao"]
+    assert len([a for a in analise.avisos if "GPS indisponível" in a]) == 1
 
 
 def test_erro_no_detetor_marca_falha_sem_derrubar_o_worker(tmp_path, sessao):

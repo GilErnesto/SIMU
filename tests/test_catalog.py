@@ -108,3 +108,81 @@ def test_exportacao(sessao):
     assert geojson["type"] == "FeatureCollection"
     assert any(f["properties"]["atribuicao"] for f in geojson["features"])
     assert "fotografo" in to_csv(sessao)
+
+
+def _registo_sem_gps(identificador):
+    return ImageRecord(
+        "upload", identificador, "Utilizador", "Dados do utilizador", "",
+        None, None, None, None, "perspective", "u",
+        width=1000, height=800, caminho_anon=f"data/anon/{identificador}.jpg",
+    )
+
+
+def _elemento_sem_posicao(registo, classe= "stop"):
+    deteccao= Detection(registo.id, "sinal", classe, (1, 2, 30, 40), 0.7, False)
+    return Element("sinal", classe, None, None, False, "sem_posicao", [Observation(deteccao, registo, None)])
+
+
+@precisa_bd
+def test_elementos_sem_posicao_ficam_separados_e_sem_geometria(sessao):
+    a= _registo_sem_gps("t-gps-a")
+    write_catalog(
+        sessao, CLASSES, [a],
+        [_elemento_sem_posicao(a), _elemento_sem_posicao(a)],
+    )
+    linhas= sessao.query(Elemento).filter(Elemento.metodo_geo == "sem_posicao").all()
+    assert len(linhas) == 2
+    assert all(linha.geom is None for linha in linhas)
+    assert all(linha.observacoes[0].bearing is None for linha in linhas)
+    assert all(linha.n_observacoes == 1 for linha in linhas)
+
+
+@precisa_bd
+def test_exportacao_com_elementos_sem_posicao(sessao):
+    a= _registo_sem_gps("t-gps-b")
+    write_catalog(sessao, CLASSES, [a], [_elemento_sem_posicao(a, "perigo")])
+    features= [f for f in to_geojson(sessao)["features"] if f["properties"]["metodo_geo"] == "sem_posicao"]
+    assert features
+    assert all(f["geometry"] is None for f in features)
+    csv_texto= to_csv(sessao)
+    assert "sem_posicao" in csv_texto
+
+
+@precisa_bd
+def test_imagem_sem_gps_nao_tem_geometria(sessao):
+    from pipeline.catalog.write import Imagem
+
+    a= _registo_sem_gps("t-gps-c")
+    write_catalog(sessao, CLASSES, [a], [_elemento_sem_posicao(a)])
+    imagem= sessao.query(Imagem).filter(Imagem.id_fonte == "t-gps-c").one()
+    assert imagem.geom is None
+    assert imagem.heading is None
+
+
+@precisa_bd
+def test_migracao_torna_o_bearing_opcional_numa_base_antiga():
+    from sqlalchemy import text
+
+    engine= create_engine(URL_BD)
+    ensure_schema(engine)
+    consulta= text(
+        "SELECT is_nullable FROM information_schema.columns "
+        "WHERE table_name = 'observacao' AND column_name = 'bearing'"
+    )
+    with engine.begin() as conexao:
+        conexao.execute(text("ALTER TABLE observacao ALTER COLUMN bearing SET NOT NULL"))
+        assert conexao.execute(consulta).scalar() == "NO"
+    ensure_schema(engine)
+    with engine.connect() as conexao:
+        assert conexao.execute(consulta).scalar() == "YES"
+    ensure_schema(engine)
+
+
+def test_feature_sem_geometria_nao_rebenta():
+    elemento= SimpleNamespace(
+        id=2, categoria="sinal", classe="stop", geom=None, confianca=0.5, obstruido=False,
+        estado="auto", metodo_geo="sem_posicao", n_observacoes=1, observacoes=[],
+    )
+    feature= to_feature(elemento)
+    assert feature["geometry"] is None
+    assert feature["properties"]["metodo_geo"] == "sem_posicao"

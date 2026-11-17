@@ -8,6 +8,7 @@ export const ESTADOS= {
 export const METODOS= {
   triangulacao: "Triangulação de várias imagens",
   monocular: "Estimativa a partir de uma imagem",
+  manual: "Indicada pelo técnico",
 };
 
 export const FONTES= {

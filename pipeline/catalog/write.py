@@ -99,7 +99,7 @@ class Observacao(Base):
     bbox= mapped_column(JSON)
     classe: Mapped[str]= mapped_column(String(32))
     confianca: Mapped[float]= mapped_column(Float)
-    bearing: Mapped[float]= mapped_column(Float)
+    bearing: Mapped[float | None]= mapped_column(Float)
     elemento: Mapped[Elemento]= relationship(back_populates="observacoes")
     imagem: Mapped[Imagem]= relationship()
 
@@ -128,6 +128,7 @@ def ensure_schema(engine: Engine) -> None:
             conexao.execute(
                 text(f"CREATE INDEX IF NOT EXISTS ix_{tabela}_analise_id ON {tabela} (analise_id)")
             )
+        conexao.execute(text("ALTER TABLE observacao ALTER COLUMN bearing DROP NOT NULL"))
     with Session(engine) as sessao:
         atribuir_analise_inicial(sessao)
         sessao.commit()
@@ -171,7 +172,9 @@ def anon_paths(session: Session, fonte: str) -> dict[str, str]:
     return {id_fonte: caminho for id_fonte, caminho in session.execute(consulta)}
 
 
-def _ponto(lon: float, lat: float) -> WKTElement:
+def _ponto(lon: float | None, lat: float | None) -> WKTElement | None:
+    if lon is None or lat is None:
+        return None
     return WKTElement(f"POINT({lon} {lat})", srid=4326)
 
 
@@ -230,7 +233,7 @@ def write_catalog(
     session.flush()
     for elemento in elements:
         raio= classes.categorias[elemento.category].raio_dedup_m
-        linha= _vizinho(session, elemento, raio, analise_id)
+        linha= _vizinho(session, elemento, raio, analise_id) if elemento.lon is not None else None
         if linha is None:
             linha= Elemento(
                 categoria=elemento.category,

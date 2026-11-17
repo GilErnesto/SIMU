@@ -26,6 +26,7 @@ function Legenda({ config }) {
           <span className="pino pino--legenda pino--c0 pino--corrigido" aria-hidden="true" />
           Barra branca: corrigido
         </li>
+        <li>Sem posição: só aparece na lista, não no mapa</li>
       </ul>
     </details>
   );
@@ -98,6 +99,7 @@ export default function ListaElementos({
                     <span className="item__meta">
                       {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}
                       {p.obstruido ? ", tapado" : ""}
+                      {feature.geometry ? "" : ", sem posição"}
                     </span>
                   </span>
                 </button>

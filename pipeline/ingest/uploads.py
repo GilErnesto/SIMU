@@ -213,6 +213,22 @@ def _rumos_em_falta(candidatas: list[tuple[Path, dict]]) -> list[float | None]:
     return rumos
 
 
+def _registo_de_foto(caminho: Path, info: dict, prefixo: str, n: int, lon, lat, rumo) -> ImageRecord:
+    return ImageRecord(
+        fonte="upload",
+        id_fonte=f"{prefixo}-{n:05d}",
+        autor="Utilizador",
+        licenca="Dados do utilizador",
+        url_origem="",
+        capturada_em=info["data"],
+        lon=lon,
+        lat=lat,
+        heading=rumo,
+        camera_type="spherical" if info["esferica"] else "perspective",
+        url_imagem=str(caminho),
+    )
+
+
 def carregar(pasta: Path, prefixo: str, parametros: dict) -> tuple[list[ImageRecord], list[str]]:
     ficheiros= sorted(p for p in pasta.iterdir() if p.is_file())
     por_tipo= {"imagem": [], "video": [], "gpx": []}
@@ -225,34 +241,27 @@ def carregar(pasta: Path, prefixo: str, parametros: dict) -> tuple[list[ImageRec
     n= 0
 
     candidatas= []
+    sem_gps= []
     for caminho in por_tipo["imagem"]:
         info= ler_exif(caminho)
-        if info["lat"] is None:
-            avisos.append(f"{nome_original(caminho)}: sem GPS na foto, não pode ser localizada")
-            continue
-        candidatas.append((caminho, info))
+        (candidatas if info["lat"] is not None else sem_gps).append((caminho, info))
     candidatas.sort(key=lambda c: (c[1]["data"] or datetime.min.replace(tzinfo=UTC), c[0].name))
     rumos= _rumos_em_falta(candidatas)
     for (caminho, info), rumo in zip(candidatas, rumos, strict=True):
-        if rumo is None:
-            avisos.append(f"{nome_original(caminho)}: sem direção na foto e sem fotos vizinhas para a deduzir")
-            continue
         n+= 1
-        registos.append(
-            ImageRecord(
-                fonte="upload",
-                id_fonte=f"{prefixo}-{n:05d}",
-                autor="Utilizador",
-                licenca="Dados do utilizador",
-                url_origem="",
-                capturada_em=info["data"],
-                lon=info["lon"],
-                lat=info["lat"],
-                heading=rumo,
-                camera_type="spherical" if info["esferica"] else "perspective",
-                url_imagem=str(caminho),
+        if rumo is None:
+            avisos.append(
+                f"{nome_original(caminho)}: sem direção na foto e sem fotos vizinhas para a deduzir. "
+                "A imagem foi analisada, mas os elementos ficam sem posição."
             )
+        registos.append(_registo_de_foto(caminho, info, prefixo, n, info["lon"], info["lat"], rumo))
+    for caminho, info in sem_gps:
+        n+= 1
+        avisos.append(
+            f"{nome_original(caminho)}: GPS indisponível na foto. "
+            "A imagem foi analisada, mas os elementos ficam sem posição no mapa."
         )
+        registos.append(_registo_de_foto(caminho, info, prefixo, n, None, None, None))
 
     fps= float(parametros.get("fps") or FPS_PADRAO)
     deslocamento= float(parametros.get("offset_s") or 0.0)

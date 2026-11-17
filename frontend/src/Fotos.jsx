@@ -88,7 +88,12 @@ export default function Fotos({ config, selecionadoId, detalhe, aoAvaliar, aoRep
               {p.n_observacoes} {p.n_observacoes === 1 ? "fotografia" : "fotografias"}
             </p>
           )}
-          {p && <p className="fotos__sub">Posição obtida por: {METODOS[p.metodo_geo] ?? p.metodo_geo}</p>}
+          {p && p.metodo_geo === "sem_posicao" && (
+            <p className="fotos__sub">Posição indisponível: a fotografia não tem GPS.</p>
+          )}
+          {p && p.metodo_geo !== "sem_posicao" && (
+            <p className="fotos__sub">Posição obtida por: {METODOS[p.metodo_geo] ?? p.metodo_geo}</p>
+          )}
         </div>
         <button type="button" className="botao botao--principal" disabled={!p} onClick={aoAvaliar}>
           Avaliar

@@ -88,13 +88,14 @@ export default function Mapa({
   aoEscolherPosicao,
 }) {
   const [lonMin, latMin, lonMax, latMax]= config.bbox;
+  const comPosicao= useMemo(() => features.filter((feature) => feature.geometry), [features]);
   const limites= [
     [latMin, lonMin],
     [latMax, lonMax],
   ];
   const marcadores= useMemo(
     () =>
-      features.map((feature) => {
+      comPosicao.map((feature) => {
         const p= feature.properties;
         const [lon, lat]= feature.geometry.coordinates;
         const nome= rotuloClasse(config, p.categoria, p.classe);
@@ -105,7 +106,7 @@ export default function Mapa({
           icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId),
         };
       }),
-    [config, features, selecionadoId],
+    [config, comPosicao, selecionadoId],
   );
   const posicaoCandidata=
     candidata && Number.isFinite(candidata.lat) && Number.isFinite(candidata.lon)
@@ -121,7 +122,7 @@ export default function Mapa({
         maxZoom={20}
       />
       <AjustarTamanho vista={vista} />
-      <AjustarVista features={features} bbox={config.bbox} />
+      <AjustarVista features={comPosicao} bbox={config.bbox} />
       <Foco alvo={foco} />
       <EscolherPosicao ativo={modoMover} aoEscolher={aoEscolherPosicao} />
       <MarkerClusterGroup iconCreateFunction={iconeGrupo} showCoverageOnHover={false}>

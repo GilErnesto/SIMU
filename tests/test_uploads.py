@@ -171,19 +171,37 @@ def test_carregar_fotos_com_e_sem_gps_e_direcao_deduzida(tmp_path):
     _foto(tmp_path / "0002_b.jpg", lat= 40.6301, lon= -8.6600, rumo= 45.0, data= "2026:05:01 10:00:10")
     Image.new("RGB", (32, 32)).save(tmp_path / "0003_c.jpg")
     registos, avisos= carregar(tmp_path, "tk", {})
-    assert [r.id_fonte for r in registos] == ["tk-00001", "tk-00002"]
+    assert [r.id_fonte for r in registos] == ["tk-00001", "tk-00002", "tk-00003"]
     assert registos[0].heading == pytest.approx(0, abs=0.5)
     assert registos[1].heading == pytest.approx(45.0)
     assert registos[0].fonte == "upload"
     assert registos[0].camera_type == "perspective"
-    assert any("c.jpg" in a and "sem GPS" in a for a in avisos)
+    assert registos[0].localizavel
+    assert registos[1].localizavel
+    assert not registos[2].localizavel
+    assert (registos[2].lon, registos[2].lat, registos[2].heading) == (None, None, None)
+    aviso= next(a for a in avisos if "c.jpg" in a)
+    assert "GPS indisponível" in aviso
+    assert "foi analisada" in aviso
+    assert len(avisos) == 1
 
 
-def test_carregar_foto_unica_sem_direcao_e_ignorada(tmp_path):
+def test_carregar_foto_unica_sem_direcao_e_analisada_sem_posicao(tmp_path):
     _foto(tmp_path / "0001_a.jpg", rumo= None)
     registos, avisos= carregar(tmp_path, "tk", {})
-    assert registos == []
-    assert any("sem direção" in a for a in avisos)
+    assert len(registos) == 1
+    assert registos[0].lat is not None
+    assert registos[0].heading is None
+    assert not registos[0].localizavel
+    assert any("sem direção" in a and "sem posição" in a for a in avisos)
+
+
+def test_carregar_so_fotos_sem_gps_nao_falha(tmp_path):
+    Image.new("RGB", (32, 32)).save(tmp_path / "0001_a.jpg")
+    Image.new("RGB", (32, 32)).save(tmp_path / "0002_b.jpg")
+    registos, avisos= carregar(tmp_path, "tk", {})
+    assert [r.id_fonte for r in registos] == ["tk-00001", "tk-00002"]
+    assert len(avisos) == 2
 
 
 def test_carregar_video_com_gpx(tmp_path):

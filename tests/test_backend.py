@@ -80,6 +80,61 @@ def _criar(
     return sessao.scalars(select(Elemento).order_by(Elemento.id.desc())).first().id
 
 
+def _criar_sem_posicao(sessao, identificador="b-sp", classe="stop"):
+    registo= ImageRecord(
+        "upload", identificador, "Utilizador", "Dados do utilizador", "",
+        None, None, None, None, "perspective", "u",
+        width=1000, height=800, caminho_anon="data/anon/sp.jpg",
+    )
+    deteccao= Detection(registo.id, "sinal", classe, (1, 2, 30, 40), 0.7, False)
+    elemento= Element("sinal", classe, None, None, False, "sem_posicao", [Observation(deteccao, registo, None)])
+    write_catalog(sessao, CLASSES, [registo], [elemento])
+    return sessao.scalars(select(Elemento).order_by(Elemento.id.desc())).first().id
+
+
+@precisa_bd
+def test_listar_inclui_elementos_sem_posicao_com_geometria_nula(cliente, sessao):
+    _criar(sessao, "iluminacao", "candeeiro", identificador="b-1")
+    sem= _criar_sem_posicao(sessao)
+    features= cliente.get("/elementos").json()["features"]
+    por_id= {f["properties"]["id"]: f for f in features}
+    assert por_id[sem]["geometry"] is None
+    assert por_id[sem]["properties"]["metodo_geo"] == "sem_posicao"
+    caixa= f"{LON - 0.01},{LAT - 0.01},{LON + 0.01},{LAT + 0.01}"
+    assert sem not in {f["properties"]["id"] for f in cliente.get(f"/elementos?bbox={caixa}").json()["features"]}
+
+
+@precisa_bd
+def test_detalhe_de_elemento_sem_posicao(cliente, sessao):
+    sem= _criar_sem_posicao(sessao)
+    dados= cliente.get(f"/elementos/{sem}").json()
+    assert dados["geometry"] is None
+    assert dados["properties"]["observacoes"][0]["bearing"] is None
+
+
+@precisa_bd
+def test_tecnico_indica_a_posicao_de_um_elemento_sem_posicao(cliente, sessao):
+    sem= _criar_sem_posicao(sessao)
+    resposta= cliente.patch(f"/elementos/{sem}", json={"lon": -8.651, "lat": 40.641, "autor": "Ana"})
+    assert resposta.status_code == 200
+    dados= cliente.get(f"/elementos/{sem}").json()
+    assert dados["geometry"]["coordinates"] == [-8.651, 40.641]
+    assert dados["properties"]["metodo_geo"] == "manual"
+    assert dados["properties"]["estado"] == "corrigido"
+    consulta= select(Correcao).where(Correcao.elemento_id == sem, Correcao.campo == "posicao")
+    correcao= sessao.scalars(consulta).one()
+    assert correcao.valor_antigo == ""
+    assert correcao.valor_novo == "-8.651,40.641"
+
+
+@precisa_bd
+def test_corrigir_so_o_estado_de_um_elemento_sem_posicao(cliente, sessao):
+    sem= _criar_sem_posicao(sessao)
+    resposta= cliente.patch(f"/elementos/{sem}", json={"estado": "validado", "autor": "Ana"})
+    assert resposta.status_code == 200
+    assert cliente.get(f"/elementos/{sem}").json()["geometry"] is None
+
+
 def test_config_expoe_taxonomia_e_municipio(cliente):
     resposta= cliente.get("/config")
     assert resposta.status_code == 200

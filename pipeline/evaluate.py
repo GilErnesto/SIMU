@@ -44,6 +44,8 @@ def _pontos(
             raise ErroPipeline(f"Feature sem a propriedade '{nivel}'")
         if ignorar_rejeitados and propriedades.get("estado") == "rejeitado":
             continue
+        if not feature.get("geometry"):
+            continue
         lon, lat= feature["geometry"]["coordinates"][:2]
         por_classe.setdefault(classe, []).append(para_metros.transform(lon, lat))
     return por_classe
@@ -86,7 +88,8 @@ def exatidao_do_tipo(
         return [
             (para_metros.transform(*f["geometry"]["coordinates"][:2]), f["properties"]["classe"])
             for f in colecao.get("features", [])
-            if f["properties"].get("categoria") == categoria
+            if f.get("geometry")
+            and f["properties"].get("categoria") == categoria
             and f["properties"].get("estado") != "rejeitado"
         ]
 
@@ -153,11 +156,16 @@ def to_markdown(resultados: list[ResultadoClasse], tolerancia_m: float, nivel: s
 
 def cobertos(referencia: dict, imagens: dict, crs_metrico: str, raio_m: float) -> dict:
     para_metros= Transformer.from_crs("EPSG:4326", crs_metrico, always_xy=True)
-    origens= [para_metros.transform(*f["geometry"]["coordinates"][:2]) for f in imagens.get("features", [])]
+    origens= [
+        para_metros.transform(*f["geometry"]["coordinates"][:2])
+        for f in imagens.get("features", [])
+        if f.get("geometry")
+    ]
     ficam= [
         feature
         for feature in referencia.get("features", [])
-        if any(math.dist(para_metros.transform(*feature["geometry"]["coordinates"][:2]), o) <= raio_m for o in origens)
+        if feature.get("geometry")
+        and any(math.dist(para_metros.transform(*feature["geometry"]["coordinates"][:2]), o) <= raio_m for o in origens)
     ]
     return {**referencia, "features": ficam}
 

@@ -69,10 +69,10 @@ def _carregar(
 
 
 def to_feature(elemento: Elemento) -> dict:
-    ponto= to_shape(elemento.geom)
+    ponto= None if elemento.geom is None else to_shape(elemento.geom)
     return {
         "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [ponto.x, ponto.y]},
+        "geometry": None if ponto is None else {"type": "Point", "coordinates": [ponto.x, ponto.y]},
         "properties": {
             "id": elemento.id,
             "categoria": elemento.categoria,
@@ -125,7 +125,7 @@ def to_csv(
     ):
         feature= to_feature(elemento)
         propriedades= feature["properties"]
-        lon, lat= feature["geometry"]["coordinates"]
+        lon, lat= feature["geometry"]["coordinates"] if feature["geometry"] else ("", "")
         atribuicao= propriedades["atribuicao"]
         escritor.writerow(
             {

@@ -192,3 +192,61 @@ def test_classe_isolada_com_pouco_apoio_e_absorvida():
     elementos= locate([a, b, c, d], detecoes, MUNICIPIO, CLASSES)
     assert [e.class_name for e in elementos] == ["stop"]
     assert len(elementos[0].observations) == 4
+
+
+def _imagem_ponto(identificador, lon, lat, rumo):
+    return ImageRecord(
+        "upload", identificador, "u", "l", "", None, lon, lat, rumo, "perspective", "x", width=1000, height=800
+    )
+
+
+def _detecao(imagem, categoria, classe, x= 500):
+    return Detection(imagem.id, categoria, classe, (x - 20, 100, x + 20, 300), 0.8, False)
+
+
+def test_imagem_sem_gps_gera_um_elemento_por_detecao_sem_posicao():
+    sem_gps= _imagem_ponto("a", None, None, None)
+    elementos= locate(
+        [sem_gps],
+        [_detecao(sem_gps, "sinal", "stop"), _detecao(sem_gps, "sinal", "stop", 700), _detecao(sem_gps, "iluminacao", "candeeiro")],
+        MUNICIPIO,
+        CLASSES,
+    )
+    assert len(elementos) == 3
+    assert all(e.lon is None and e.lat is None and e.metodo_geo == "sem_posicao" for e in elementos)
+    assert sorted(e.class_name for e in elementos) == ["candeeiro", "stop", "stop"]
+    assert all(e.observations[0].bearing is None for e in elementos)
+
+
+def test_imagem_com_gps_mas_sem_direcao_tambem_fica_sem_posicao():
+    sem_rumo= _imagem_ponto("b", -8.65, 40.64, None)
+    (elemento,)= locate([sem_rumo], [_detecao(sem_rumo, "sinal", "stop")], MUNICIPIO, CLASSES)
+    assert elemento.lon is None
+    assert elemento.metodo_geo == "sem_posicao"
+
+
+def test_imagens_com_e_sem_gps_na_mesma_analise_nao_se_misturam():
+    x0, y0= PARA_METROS.transform(-8.65, 40.64)
+    lon_a, lat_a= PARA_GRAUS.transform(x0, y0 - 10)
+    lon_b, lat_b= PARA_GRAUS.transform(x0 + 10, y0 - 10)
+    a= _imagem_ponto("a", lon_a, lat_a, 0.0)
+    b= _imagem_ponto("b", lon_b, lat_b, 315.0)
+    sem_gps= _imagem_ponto("c", None, None, None)
+    elementos= locate(
+        [a, b, sem_gps],
+        [_detecao(a, "iluminacao", "candeeiro"), _detecao(b, "iluminacao", "candeeiro"), _detecao(sem_gps, "iluminacao", "candeeiro")],
+        MUNICIPIO,
+        CLASSES,
+    )
+    posicionados= [e for e in elementos if e.lon is not None]
+    sem_posicao= [e for e in elementos if e.lon is None]
+    assert len(posicionados) == 1
+    assert len(posicionados[0].observations) == 2
+    assert len(sem_posicao) == 1
+    assert sem_posicao[0].observations[0].image.id == sem_gps.id
+
+
+def test_localizavel_precisa_de_posicao_e_direcao():
+    assert _imagem_ponto("a", -8.65, 40.64, 10.0).localizavel
+    assert not _imagem_ponto("a", None, None, 10.0).localizavel
+    assert not _imagem_ponto("a", -8.65, 40.64, None).localizavel

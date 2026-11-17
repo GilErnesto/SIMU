@@ -10,9 +10,9 @@ class ImageRecord:
     licenca: str
     url_origem: str
     capturada_em: datetime | None
-    lon: float
-    lat: float
-    heading: float
+    lon: float | None
+    lat: float | None
+    heading: float | None
     camera_type: str
     url_imagem: str
     width: int= 0
@@ -22,6 +22,10 @@ class ImageRecord:
     @property
     def id(self) -> str:
         return f"{self.fonte}:{self.id_fonte}"
+
+    @property
+    def localizavel(self) -> bool:
+        return self.lon is not None and self.lat is not None and self.heading is not None
 
 
 @dataclass(frozen=True)
@@ -38,15 +42,15 @@ class Detection:
 class Observation:
     detection: Detection
     image: ImageRecord
-    bearing: float
+    bearing: float | None
 
 
 @dataclass
 class Element:
     category: str
     class_name: str
-    lon: float
-    lat: float
+    lon: float | None
+    lat: float | None
     obstruido: bool
     metodo_geo: str
     observations: list[Observation]= field(default_factory=list)

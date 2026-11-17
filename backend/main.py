@@ -181,10 +181,13 @@ def corrigir(
         alteracoes.append(("classe", elemento.classe, pedido.classe))
         elemento.classe= pedido.classe
     if pedido.lon is not None:
-        antigo= to_shape(elemento.geom)
-        if (antigo.x, antigo.y) != (pedido.lon, pedido.lat):
-            alteracoes.append(("posicao", f"{antigo.x},{antigo.y}", f"{pedido.lon},{pedido.lat}"))
+        antigo= None if elemento.geom is None else to_shape(elemento.geom)
+        if antigo is None or (antigo.x, antigo.y) != (pedido.lon, pedido.lat):
+            anterior= "" if antigo is None else f"{antigo.x},{antigo.y}"
+            alteracoes.append(("posicao", anterior, f"{pedido.lon},{pedido.lat}"))
             elemento.geom= WKTElement(f"POINT({pedido.lon} {pedido.lat})", srid=4326)
+            if antigo is None:
+                elemento.metodo_geo= "manual"
     novo_estado= pedido.estado
     if novo_estado is None and alteracoes:
         novo_estado= "corrigido"
