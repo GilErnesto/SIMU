@@ -39,3 +39,7 @@ def get_classes() -> Classes:
 
 def anon_dir() -> Path:
     return Path(os.environ.get("ANON_DIR", "data/anon"))
+
+
+def raw_dir() -> Path:
+    return Path(os.environ.get("RAW_DIR", "data/raw"))

@@ -1,8 +1,12 @@
+import os
+import re
+import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from geoalchemy2 import WKTElement
 from geoalchemy2.shape import to_shape
@@ -10,17 +14,25 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from backend.deps import anon_dir, get_classes, get_municipio, get_session
+from backend.deps import anon_dir, get_classes, get_engine, get_municipio, get_session, raw_dir
+from pipeline.catalog import analises
 from pipeline.catalog.export import to_csv, to_feature, to_geojson
-from pipeline.catalog.write import Correcao, Elemento, Imagem, Observacao
+from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao, ensure_schema
 from pipeline.config import Classes, Municipio
 from pipeline.errors import ErroPipeline
+from pipeline.ingest.uploads import tipo_de
 
 load_dotenv()
 
 Estado= Literal["auto", "validado", "corrigido", "rejeitado"]
 
-app= FastAPI(title="Ctrl + F")
+@asynccontextmanager
+async def ciclo_de_vida(_):
+    ensure_schema(get_engine())
+    yield
+
+
+app= FastAPI(title="Ctrl + F", lifespan=ciclo_de_vida)
 
 
 @app.exception_handler(ErroPipeline)
@@ -97,6 +109,15 @@ def _detalhe(elemento: Elemento) -> dict:
     return feature
 
 
+def _analise_id(sessao: Session, token: str | None) -> int | None:
+    if token is None:
+        return None
+    analise= analises.obter_por_token(sessao, token)
+    if analise is None:
+        raise HTTPException(404, "Análise não encontrada")
+    return analise.id
+
+
 @app.get("/config")
 def configuracao(
     municipio: Municipio= Depends(get_municipio), classes: Classes= Depends(get_classes)
@@ -122,6 +143,8 @@ def listar(
     estado: Estado | None= None,
     min_observacoes: int | None= Query(default=None, ge=1),
     min_confianca: float | None= Query(default=None, ge=0, le=1),
+    analise: str | None= None,
+    classe: str | None= None,
     sessao: Session= Depends(get_session),
     classes: Classes= Depends(get_classes),
 ):
@@ -133,6 +156,8 @@ def listar(
         _bbox(bbox),
         min_observacoes=min_observacoes,
         min_confianca=min_confianca,
+        analise_id=_analise_id(sessao, analise),
+        classe=classe,
     )
 
 
@@ -197,6 +222,8 @@ def exportar_geojson(
     categoria: str | None= None,
     min_observacoes: int | None= Query(default=None, ge=1),
     min_confianca: float | None= Query(default=None, ge=0, le=1),
+    analise: str | None= None,
+    classe: str | None= None,
     sessao: Session= Depends(get_session),
     classes: Classes= Depends(get_classes),
 ):
@@ -208,6 +235,8 @@ def exportar_geojson(
             categoria,
             min_observacoes=min_observacoes,
             min_confianca=min_confianca,
+            analise_id=_analise_id(sessao, analise),
+            classe=classe,
         ),
         media_type="application/geo+json",
         headers={"Content-Disposition": 'attachment; filename="catalogo.geojson"'},
@@ -220,6 +249,8 @@ def exportar_csv(
     categoria: str | None= None,
     min_observacoes: int | None= Query(default=None, ge=1),
     min_confianca: float | None= Query(default=None, ge=0, le=1),
+    analise: str | None= None,
+    classe: str | None= None,
     sessao: Session= Depends(get_session),
     classes: Classes= Depends(get_classes),
 ):
@@ -231,7 +262,116 @@ def exportar_csv(
             categoria,
             min_observacoes=min_observacoes,
             min_confianca=min_confianca,
+            analise_id=_analise_id(sessao, analise),
+            classe=classe,
         ),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="catalogo.csv"'},
     )
+
+
+LIMITE_FICHEIROS= 2000
+BLOCO= 1024 * 1024
+
+
+def _limite_bytes() -> int:
+    return int(os.environ.get("MAX_UPLOAD_MB", "8192")) * 1024 * 1024
+
+
+def _formato_valido(tipo: str, cabecalho: bytes) -> bool:
+    if tipo == "imagem":
+        return cabecalho.startswith((b"\xff\xd8\xff", b"\x89PNG"))
+    if tipo == "video":
+        return cabecalho[4:8] == b"ftyp" or cabecalho.startswith((b"RIFF", b"\x1a\x45\xdf\xa3"))
+    return cabecalho.lstrip().startswith(b"<?xml") or b"<gpx" in cabecalho[:4096].lower()
+
+
+def _analise_json(analise: Analise) -> dict:
+    return {
+        "token": analise.token,
+        "nome": analise.nome,
+        "estado": analise.estado,
+        "total": analise.total,
+        "feitas": analise.feitas,
+        "n_elementos": analise.n_elementos,
+        "avisos": analise.avisos or [],
+        "erro": analise.erro,
+        "parametros": analise.parametros or {},
+        "criada_em": analise.criada_em,
+        "iniciada_em": analise.iniciada_em,
+        "concluida_em": analise.concluida_em,
+    }
+
+
+@app.post("/analises", status_code=201)
+async def criar_analise(
+    ficheiros: list[UploadFile]= File(...),
+    nome: str= Form(""),
+    offset_s: float= Form(0.0),
+    fps: float= Form(2.0),
+    sessao: Session= Depends(get_session),
+):
+    if not ficheiros:
+        raise HTTPException(400, "Não foi enviado nenhum ficheiro")
+    if len(ficheiros) > LIMITE_FICHEIROS:
+        raise HTTPException(400, f"Demasiados ficheiros de uma vez (máximo {LIMITE_FICHEIROS})")
+    if not 0.2 <= fps <= 10:
+        raise HTTPException(422, "As imagens por segundo do vídeo têm de estar entre 0,2 e 10")
+    token= analises.novo_token()
+    pasta= raw_dir() / token
+    pasta.mkdir(parents=True, exist_ok=False)
+    avisos= []
+    guardados= {"imagem": 0, "video": 0, "gpx": 0}
+    total= 0
+    limite= _limite_bytes()
+    try:
+        for n, ficheiro in enumerate(ficheiros, 1):
+            original= Path(ficheiro.filename or "sem_nome").name
+            tipo= tipo_de(original)
+            if tipo is None:
+                avisos.append(f"{original}: tipo de ficheiro não suportado, ignorado")
+                continue
+            seguro= re.sub(r"[^A-Za-z0-9._-]+", "_", original)[-80:]
+            destino= pasta / f"{n:04d}_{seguro}"
+            primeiro= await ficheiro.read(BLOCO)
+            if not _formato_valido(tipo, primeiro):
+                avisos.append(f"{original}: o conteúdo não corresponde ao tipo de ficheiro, ignorado")
+                continue
+            bloco= primeiro
+            with destino.open("wb") as saida:
+                while bloco:
+                    total+= len(bloco)
+                    if total > limite:
+                        raise HTTPException(413, "O envio ultrapassa o tamanho máximo permitido")
+                    saida.write(bloco)
+                    bloco= await ficheiro.read(BLOCO)
+            guardados[tipo]+= 1
+        if guardados["imagem"] + guardados["video"] == 0:
+            raise HTTPException(400, "Nenhuma imagem ou vídeo válido. Aceita JPG, PNG e vídeos MP4, MOV, AVI ou WEBM.")
+    except BaseException:
+        shutil.rmtree(pasta, ignore_errors=True)
+        raise
+    if guardados["video"] and not guardados["gpx"]:
+        avisos.append("Enviou vídeo sem ficheiro GPX: sem ele não é possível localizar os elementos do vídeo")
+    analise= analises.criar(
+        sessao,
+        nome.strip()[:120] or "Análise sem nome",
+        {"offset_s": offset_s, "fps": fps},
+        avisos,
+        token=token,
+    )
+    return {"token": analise.token, "url": f"/a/{analise.token}", "estado": analise.estado}
+
+
+@app.get("/analises")
+def listar_analises(sessao: Session= Depends(get_session)):
+    linhas= sessao.scalars(select(Analise).order_by(Analise.id.desc()).limit(100))
+    return [_analise_json(a) for a in linhas]
+
+
+@app.get("/analises/{token}")
+def obter_analise(token: str, sessao: Session= Depends(get_session)):
+    analise= analises.obter_por_token(sessao, token)
+    if analise is None:
+        raise HTTPException(404, "Análise não encontrada")
+    return _analise_json(analise)

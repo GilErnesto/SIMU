@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from backend.deps import get_classes, get_municipio, get_session
+from backend.deps import get_classes, get_engine, get_municipio, get_session
 from backend.main import app
 from pipeline.catalog.write import Correcao, Elemento, ensure_schema, write_catalog
 from pipeline.config import load_classes
@@ -261,3 +261,16 @@ def test_exportacoes(cliente, sessao):
     csv= cliente.get("/export.csv")
     assert csv.headers["content-type"].startswith("text/csv")
     assert "fotografo" in csv.text
+
+
+@precisa_bd
+def test_arranque_cria_o_esquema(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", URL_BD)
+    get_engine.cache_clear()
+    try:
+        with TestClient(app) as cliente:
+            resposta= cliente.get("/elementos")
+        assert resposta.status_code == 200
+        assert resposta.json()["type"] == "FeatureCollection"
+    finally:
+        get_engine.cache_clear()
