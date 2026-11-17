@@ -77,7 +77,7 @@ categorias:
   iluminacao:
     rotulo: Iluminação
     raio_dedup_m: 6.5
-    altura_m: 8
+    altura_m: 6
     limiar_detecao: 0.3
     classes:
       - candeeiro
