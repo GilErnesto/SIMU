@@ -2,7 +2,7 @@
 
 Deteta mobiliário urbano (sinais de trânsito, candeeiros, ecopontos) em imagens de rua, calcula a posição de cada elemento, guarda-o num catálogo PostGIS, mostra-o num mapa para revisão por um técnico e exporta em GeoJSON e CSV. Projeto do ATC Hackathon 2026, desafio 2 (Câmara Municipal de Aveiro e Universidade de Aveiro).
 
-Estado: pipeline (ingest, anonimização, deteção, geolocalização, catálogo), API FastAPI e interface React com mapa. Falta `training/` (treino de um YOLO próprio) e avaliar com dados reais.
+Estado: pipeline (ingest, anonimização, deteção, geolocalização, catálogo), API FastAPI, interface React com mapa, preparação de dados e treino de um YOLO próprio (`training/`) e avaliação contra uma referência do Mapillary. O tipo de sinal ainda é o ponto fraco (ver `docs/avaliacao.md`).
 
 ## Arranque
 
@@ -38,7 +38,8 @@ Modelos necessários, em `models/` (não versionada):
 - Detetor, à escolha com `--detetor`:
   - `owlv2` (por omissão): OWLv2 zero-shot, local e Apache 2.0. Descarrega o modelo do Hugging Face na primeira utilização e usa a GPU se existir. `--limiar` define a confiança mínima (0,2 por omissão). Não deteta sinais tapados: nunca marca `obstruido`.
     Funciona em duas fases: o OWLv2 encontra só os três grandes (sinal, candeeiro, contentor de lixo) e o CLIP classifica o tipo no recorte (por exemplo, Stop, cedência, subterrâneo), descartando coisas parecidas (portas, números de porta, letreiros). `--sem-refinar` desliga a segunda fase e `--limiar-classe` define a confiança mínima do tipo. O tipo de cada elemento sai da votação de todas as imagens que o veem.
-  - `yolo`: pesos próprios em `models/detetor.pt` (`--pesos`). Treino ainda por fazer.
+  - `yolo`: pesos próprios em `models/detetor.pt` (`--pesos`), treinados como descrito em "Treino do detetor". Também passa pela segunda fase (CLIP), salvo com `--sem-refinar`.
+  - `limiar_detecao` em `config/classes.yaml` descarta deteções abaixo dessa confiança, por categoria.
 
 ## Tudo de uma vez com Docker
 
@@ -94,9 +95,48 @@ TEST_DATABASE_URL=postgresql+psycopg://utilizador:palavra-passe@localhost:5432/b
 
 Os testes de catálogo e API só correm com `TEST_DATABASE_URL`. Esta base tem de ser descartável e vazia: os testes assumem que não há dados.
 
+## Treino do detetor
+
+Os três grandes (sinal, semáforo, candeeiro, contentor) treinam-se com o Open Images e o Mapillary Vistas v2.0:
+
+```bash
+python -m training.datasets.openimages
+python -m training.datasets.vistas --origem datasets/mtsd_raw/<pasta mtsd_v2_fully_annotated>
+python -m training.train --config training/configs/grandes.yaml
+```
+
+- O Open Images traz imagens CC BY 2.0 e o Vistas é CC BY-NC-SA 4.0: **os pesos resultantes só servem para uso não comercial**. O autor e a licença de cada imagem ficam em `atribuicao.csv`, na pasta de cada dataset.
+- Todas as imagens passam pelo EgoBlur antes de serem gravadas em `data/datasets/`. Nada disto vai para o git.
+- O Vistas tem polígonos por objeto, sem o tipo do sinal. Junta-se cada luminária ao poste que a segura, para a caixa servir à estimativa de distância.
+- Para o tipo de sinal (Stop, cedência, proibição...) o ideal é o MTSD verdadeiro (`mapillary.com/dataset/trafficsign`, com conta): `python -m training.datasets.mtsd --origem <pasta>` e `training/configs/sinais.yaml`.
+
+### Tipo de sinal com as deteções do Mapillary
+
+Sem o MTSD, o tipo aprende-se com as deteções por imagem da API do Mapillary, que trazem o tipo de cada sinal:
+
+```bash
+python -m training.datasets.tipos_mapillary --zona config/treino/aveiro_tipos.yaml --excluir config/municipio.yaml config/avaliacao/rossio.yaml config/avaliacao/lourenco_peixinho.yaml
+python -m training.tipos recortar
+python -m training.tipos treinar
+```
+
+- Deixa de fora as zonas piloto, de afinação e de teste, para a avaliação não ver imagens do treino.
+- Os originais ficam em `data/raw/tipos_mapillary/` só até serem anonimizados e recortados, e depois são apagados.
+- `treinar` ajusta uma regressão logística sobre as características de imagem do CLIP, compara-a com o CLIP zero-shot no mesmo conjunto de validação (`data/datasets/tipos/relatorio.json`) e grava `models/tipo_sinal.npz`.
+- Se esse ficheiro existir, o pipeline usa-o para escolher o tipo (`--cabeca-sinal`); o CLIP zero-shot continua a descartar o que não é sinal. As etiquetas vêm de um modelo do Mapillary, por isso têm ruído. Imagens CC BY-SA 4.0.
+
 ## Avaliação
 
-`python -m pipeline.evaluate` compara o catálogo exportado com uma referência anotada à mão. Método e resultados em `docs/avaliacao.md`.
+`python -m pipeline.evaluate` compara o catálogo exportado com uma referência. Método e resultados em `docs/avaliacao.md`.
+
+```bash
+python -m pipeline.referencia --municipio config/municipio.yaml --saida data/avaliacao/referencia.geojson
+python -m pipeline.bancada --fonte mapillary --municipio config/avaliacao/rossio.yaml --nome experiencia --referencia data/avaliacao/referencia_rossio.geojson
+```
+
+- `pipeline.referencia` gera a referência a partir das map features do Mapillary. A tua referência anotada à mão pode ser um GeoJSON ou um CSV com as colunas `lat`, `lon` e `classe` (ou `categoria`).
+- `pipeline.bancada` corre um detetor sobre uma zona sem tocar na base de dados e avalia-o, com `--nivel categoria` ou `classe`. Guarda as deteções em cache para repetir a avaliação sem voltar a detetar.
+- Afinar limiares só nas zonas em `config/avaliacao/` marcadas como afinação, e medir na de teste uma única vez.
 
 ## Privacidade
 
@@ -109,7 +149,7 @@ As imagens do Mapillary são CC BY-SA 4.0. O autor, a fonte, o URL de origem e a
 ## Limitações conhecidas
 
 - A interface não tem autenticação: o nome do técnico é texto livre.
-- O OWLv2 zero-shot não foi avaliado em imagens de rua reais. A qualidade das deteções por classe é desconhecida.
+- O tipo de sinal é fraco: o CLIP zero-shot acerta o tipo em cerca de 19% a 28% dos sinais encontrados (`docs/avaliacao.md`). A referência é automática (Mapillary), não anotada por pessoas.
 - Dois raios de objetos diferentes da mesma classe podem gerar um ponto falso por triangulação.
 - Deteções sem posição possível (raios paralelos e objeto demasiado longe para a estimativa monocular) não entram no catálogo.
 - Distância monocular só por altura conhecida. Depth Anything ainda não está integrado.
