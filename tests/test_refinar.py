@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from pipeline.config import load_classes
+from pipeline.detect.cabeca import Cabeca
 from pipeline.models import Detection
 
 torch= pytest.importorskip("torch")
@@ -28,8 +29,9 @@ class ProcessadorFalso:
 
 
 class ModeloFalso:
-    def __init__(self, logits):
+    def __init__(self, logits, embeddings= None):
         self.logits= logits
+        self.embeddings= embeddings
 
     def __call__(self, **_):
         class Saida:
@@ -37,6 +39,8 @@ class ModeloFalso:
 
         saida= Saida()
         saida.logits_per_image= torch.tensor(self.logits, dtype=torch.float32)
+        if self.embeddings is not None:
+            saida.image_embeds= torch.tensor(self.embeddings, dtype=torch.float32)
         return saida
 
 
@@ -213,3 +217,12 @@ def test_varios_textos_do_mesmo_tipo_somam_a_probabilidade():
     previsto= _refinador([linha]).classificar("sinal", [_imagem()])
     assert previsto[0][0] == "informacao"
     assert previsto[0][1] > 0.4
+
+
+def test_cabeca_de_iluminacao_descarta_nao_luz_e_mantem_poste_luz():
+    cabeca= Cabeca(["nao_luz", "poste_luz"], np.array([[5.0, 0.0], [0.0, 5.0]]), np.zeros(2))
+    for embedding, esperado in (([1.0, 0.0], []), ([0.0, 1.0], ["poste_luz"])):
+        modelo= ModeloFalso([[0.0] * _total("iluminacao")], [embedding])
+        refinador= Refinador(ProcessadorFalso(), modelo, CLASSES, 0.5, cabecas={"iluminacao": cabeca})
+        resultado= DuasFases(DetetorFalso([_det("iluminacao", "luz")]), refinador, CLASSES).detect("img", _imagem())
+        assert [d.class_name for d in resultado] == esperado

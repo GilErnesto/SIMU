@@ -32,6 +32,7 @@ ADIANTE= 2
 PREPARADORES= 2
 NOME_CHECKPOINT= "checkpoint.jsonl"
 CABECA_SINAL= "models/tipo_sinal.npz"
+CABECA_ILUMINACAO= "models/tipo_iluminacao.npz"
 
 
 def _variavel(nome: str) -> str:
@@ -59,6 +60,9 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
 
         cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
         cabecas= {"sinal": cabeca} if cabeca.exists() else {}
+        cabeca_iluminacao= Path(getattr(args, "cabeca_iluminacao", None) or CABECA_ILUMINACAO)
+        if cabeca_iluminacao.exists():
+            cabecas["iluminacao"]= cabeca_iluminacao
         detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas), classes)
     return Limiares(detetor, classes) if limiares else detetor
 

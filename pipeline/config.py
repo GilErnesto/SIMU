@@ -1,3 +1,5 @@
+import bisect
+import itertools
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +33,7 @@ class Categoria:
     limiar_detecao: float= 0.0
     alias: dict[str, str]= field(default_factory=dict)
     combinar_confianca: bool= True
+    calibracao: tuple[tuple[float, float], ...]= ()
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,30 @@ def _ler(path: Path) -> dict:
     if not path.exists():
         raise ErroPipeline(f"Ficheiro de configuração não encontrado: {path}")
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _calibracao(campos: dict) -> tuple[tuple[float, float], ...]:
+    pares= tuple((float(bruto), float(calibrado)) for bruto, calibrado in campos.get("calibracao", ()))
+    brutos= [bruto for bruto, _ in pares]
+    if any(not 0 <= valor <= 1 for par in pares for valor in par):
+        raise ValueError("calibracao: valores fora de [0, 1]")
+    if any(anterior >= seguinte for anterior, seguinte in itertools.pairwise(brutos)):
+        raise ValueError("calibracao: valores brutos têm de ser estritamente crescentes")
+    return pares
+
+
+def calibrar_confianca(categoria: Categoria, confianca: float) -> float:
+    pares= categoria.calibracao
+    if not pares:
+        return confianca
+    brutos= [bruto for bruto, _ in pares]
+    if confianca <= brutos[0]:
+        return pares[0][1]
+    if confianca >= brutos[-1]:
+        return pares[-1][1]
+    i= bisect.bisect_right(brutos, confianca)
+    (x0, y0), (x1, y1)= pares[i - 1], pares[i]
+    return y0 + (y1 - y0) * (confianca - x0) / (x1 - x0)
 
 
 def load_municipio(path: Path) -> Municipio:
@@ -89,6 +116,7 @@ def load_classes(path: Path) -> Classes:
                 limiar_detecao=float(campos.get("limiar_detecao", 0.0)),
                 alias=dict(campos.get("alias", {})),
                 combinar_confianca=bool(campos.get("combinar_confianca", True)),
+                calibracao=_calibracao(campos),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

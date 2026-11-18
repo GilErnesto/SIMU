@@ -125,7 +125,7 @@ class DuasFases:
             for (posicao, _), (classe, probabilidade) in zip(itens, previstas, strict=True):
                 if probabilidade < self.refinador.limiar:
                     continue
-                if classe is None:
+                if classe is None or classe not in self.classes.categorias[categoria].classes:
                     descartadas.add(posicao)
                     continue
                 original= detecoes[posicao]

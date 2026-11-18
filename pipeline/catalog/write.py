@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
-from pipeline.config import Classes
+from pipeline.config import Classes, calibrar_confianca
 from pipeline.models import Element, ImageRecord
 
 PESO_OBSERVACOES= 0.25
@@ -256,7 +256,9 @@ def write_catalog(
                     imagem_id=imagens[obs.image.id].id,
                     bbox=list(obs.detection.bbox_xyxy),
                     classe=obs.detection.class_name,
-                    confianca=obs.detection.confidence,
+                    confianca=calibrar_confianca(
+                        classes.categorias[elemento.category], obs.detection.confidence
+                    ),
                     bearing=obs.bearing,
                 )
             )

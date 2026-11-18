@@ -16,12 +16,12 @@ from sqlalchemy.orm import Session
 from pipeline import checkpoint, evaluate
 from pipeline.catalog import analises
 from pipeline.catalog.write import Imagem, element_confidence
-from pipeline.config import load_classes, load_municipio
+from pipeline.config import Classes, calibrar_confianca, load_classes, load_municipio
 from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.models import Element, ImageRecord
-from pipeline.run import CABECA_SINAL, _detetor
+from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor
 
 RAIO_COBERTURA_M= 30.0
 
@@ -109,10 +109,14 @@ def detetar(registos: list[ImageRecord], detetor, cache: Path, saida=sys.stderr)
     return feitas
 
 
-def elementos_geojson(elementos: list[Element]) -> dict:
+def elementos_geojson(elementos: list[Element], classes: Classes | None= None) -> dict:
     features= []
     for elemento in elementos:
         confiancas= [o.detection.confidence for o in elemento.observations]
+        if classes is not None:
+            confiancas= [
+                calibrar_confianca(classes.categorias[elemento.category], c) for c in confiancas
+            ]
         features.append(
             {
                 "type": "Feature",
@@ -153,6 +157,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--limiar", type=float, default=0.2)
     parser.add_argument("--limiar-classe", type=float, default=0.3)
     parser.add_argument("--cabeca-sinal", default=CABECA_SINAL)
+    parser.add_argument("--cabeca-iluminacao", default=CABECA_ILUMINACAO)
     parser.add_argument("--sem-refinar", action="store_true")
     parser.add_argument("--anon-dir", help="por omissão data/anon (catálogo) ou data/avaliacao/imagens")
     parser.add_argument("--fonte", choices=("catalogo", "mapillary"), default="catalogo")
@@ -203,7 +208,7 @@ def main(argv: list[str] | None= None) -> int:
             if d.confidence >= classes.categorias[d.category].limiar_detecao
         ]
         elementos= locate(imagens, deteccoes, municipio, classes)
-        previsto= elementos_geojson(elementos)
+        previsto= elementos_geojson(elementos, classes)
         (pasta / "previsto.geojson").write_text(json.dumps(previsto), encoding="utf-8")
         (pasta / "imagens.geojson").write_text(json.dumps(imagens_geojson(imagens)), encoding="utf-8")
         print(f"{len(imagens)} imagens, {len(deteccoes)} deteções, {len(elementos)} elementos em {pasta}")
