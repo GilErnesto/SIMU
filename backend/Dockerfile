@@ -3,10 +3,13 @@ FROM python:3.12-slim
 WORKDIR /app
 
 COPY pyproject.toml ./
+RUN mkdir pipeline backend \
+    && touch pipeline/__init__.py backend/__init__.py \
+    && pip install --no-cache-dir ".[api]" \
+    && useradd --system --uid 1000 app
+
 COPY pipeline ./pipeline
 COPY backend ./backend
-RUN pip install --no-cache-dir ".[api]" \
-    && useradd --system --uid 1000 app
 
 ENV MUNICIPIO_YAML=/app/config/municipio.yaml \
     ANON_DIR=/app/data/anon \
