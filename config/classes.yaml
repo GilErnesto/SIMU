@@ -96,11 +96,11 @@ categorias:
       luz: a street lamp post
     descricoes:
       candeeiro:
-        - an ornate vintage street lantern with glass lamps on a decorative bracket
-        - a decorative classic street lamp fixed to a wall or on a short post
+        - a vintage street lantern
+        - an old-fashioned decorative street lamp
       poste_luz:
-        - a tall modern street light pole with an arm and a lamp at the top
-        - a tall metal lamp post standing on the pavement
+        - a modern street light pole
+        - a tall street lamp post
   residuos:
     rotulo: Resíduos
     raio_dedup_m: 10
