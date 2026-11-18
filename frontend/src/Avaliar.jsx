@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Foto } from "./Fotos.jsx";
+import Juntar from "./Juntar.jsx";
 import { lerNumero, rotuloClasse, rotuloEstado } from "./rotulos.js";
 
 function aoFocar(evento) {
@@ -18,6 +19,8 @@ export default function Avaliar({
   aoFechar,
   aoAlternarMover,
   aoMudarCandidata,
+  vizinhos,
+  aoJuntar,
 }) {
   const titulo= useRef(null);
   const [escolhida, setEscolhida]= useState(null);
@@ -51,6 +54,23 @@ export default function Avaliar({
       await aoGuardar({ ...corpo, autor: tecnico.trim() });
       setEscolhida(null);
       setMensagem({ tipo: "ok", texto: "Alteração guardada." });
+    } catch (erro) {
+      setMensagem({ tipo: "erro", texto: erro.message });
+    } finally {
+      setAGuardar(false);
+    }
+  }
+
+  async function juntarComVizinho(origemId) {
+    if (!tecnico.trim()) {
+      setMensagem({ tipo: "erro", texto: "Indique o seu nome antes de guardar." });
+      return;
+    }
+    setAGuardar(true);
+    setMensagem(null);
+    try {
+      await aoJuntar(origemId, tecnico.trim());
+      setMensagem({ tipo: "ok", texto: "Elementos juntados." });
     } catch (erro) {
       setMensagem({ tipo: "erro", texto: erro.message });
     } finally {
@@ -127,6 +147,8 @@ export default function Avaliar({
           Guardar tipo
         </button>
       </section>
+
+      <Juntar config={config} vizinhos={vizinhos} desativado={aGuardar} aoJuntar={juntarComVizinho} />
 
       <section className="bloco" aria-labelledby="titulo-posicao">
         <h3 id="titulo-posicao" className="bloco__titulo">

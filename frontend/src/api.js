@@ -58,6 +58,10 @@ export function apagarAnalise(token) {
   return pedir(`/analises/${encodeURIComponent(token)}`, { method: "DELETE" });
 }
 
+export function listarDuplicados(token, sinal) {
+  return pedir(`/analises/${encodeURIComponent(token)}/duplicados`, { signal: sinal });
+}
+
 export function enviarAnalise({ ficheiros, nome, offsetS, fps }, aoProgredir) {
   return new Promise((resolver, rejeitar) => {
     const dados= new FormData();
@@ -101,6 +105,22 @@ export function corrigirElemento(id, corpo) {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(corpo),
+  });
+}
+
+export function juntarElementos(id, origem, autor) {
+  return pedir(`/elementos/${id}/juntar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ origem, autor }),
+  });
+}
+
+export function separarElemento(id, observacoes, autor) {
+  return pedir(`/elementos/${id}/separar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ observacoes, autor }),
   });
 }
 

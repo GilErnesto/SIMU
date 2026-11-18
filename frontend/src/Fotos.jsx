@@ -10,7 +10,7 @@ import {
   rotuloEstado,
 } from "./rotulos.js";
 
-export function Foto({ observacao }) {
+export function Foto({ observacao, marcada, aoMarcar }) {
   const [tamanho, setTamanho]= useState(null);
   const [falhou, setFalhou]= useState(false);
   const { imagem, bbox }= observacao;
@@ -52,17 +52,57 @@ export function Foto({ observacao }) {
           </>
         )}
       </figcaption>
+      {aoMarcar && (
+        <label className="fotos__marcar">
+          <input type="checkbox" checked={!!marcada} onChange={() => aoMarcar(observacao.id)} /> Separar esta fotografia
+        </label>
+      )}
     </figure>
   );
 }
 
-export default function Fotos({ config, selecionadoId, detalhe, aoAvaliar, aoRepetir }) {
+export default function Fotos({ config, selecionadoId, detalhe, aoAvaliar, aoRepetir, tecnico, aoMudarTecnico, aoSeparar }) {
   const titulo= useRef(null);
+  const [marcadas, setMarcadas]= useState(() => new Set());
+  const [aConfirmar, setAConfirmar]= useState(false);
+  const [mensagem, setMensagem]= useState(null);
   const p= detalhe.estado === "ok" ? detalhe.dados.properties : null;
 
   useEffect(() => {
     if (selecionadoId !== null) titulo.current?.focus({ preventScroll: true });
   }, [selecionadoId]);
+
+  useEffect(() => {
+    setMarcadas(new Set());
+    setAConfirmar(false);
+    setMensagem(null);
+  }, [selecionadoId]);
+
+  function alternarMarcada(id) {
+    setMarcadas((anteriores) => {
+      const proximas= new Set(anteriores);
+      if (proximas.has(id)) proximas.delete(id);
+      else proximas.add(id);
+      return proximas;
+    });
+    setAConfirmar(false);
+  }
+
+  async function confirmarSeparacao() {
+    if (!tecnico.trim()) {
+      setMensagem({ tipo: "erro", texto: "Indique o seu nome antes de separar." });
+      setAConfirmar(false);
+      return;
+    }
+    try {
+      await aoSeparar([...marcadas], tecnico.trim());
+      setMarcadas(new Set());
+      setAConfirmar(false);
+      setMensagem({ tipo: "ok", texto: "Fotografias separadas num novo elemento sem posição." });
+    } catch (erro) {
+      setMensagem({ tipo: "erro", texto: erro.message });
+    }
+  }
 
   if (selecionadoId === null) {
     return (
@@ -113,9 +153,64 @@ export default function Fotos({ config, selecionadoId, detalhe, aoAvaliar, aoRep
       {p && p.observacoes.length === 0 && <p className="nota">Este elemento não tem fotografias registadas.</p>}
       {p && (
         <div className="fotos__lista">
-          {p.observacoes.map((observacao) => (
-            <Foto key={observacao.id} observacao={observacao} />
-          ))}
+          {p.observacoes.map((observacao) =>
+            p.observacoes.length > 1 ? (
+              <Foto
+                key={observacao.id}
+                observacao={observacao}
+                marcada={marcadas.has(observacao.id)}
+                aoMarcar={alternarMarcada}
+              />
+            ) : (
+              <Foto key={observacao.id} observacao={observacao} />
+            ),
+          )}
+        </div>
+      )}
+      {(marcadas.size > 0 || mensagem) && (
+        <div className="fotos__separar">
+          {marcadas.size > 0 && (
+            <>
+              <p className="nota">
+                Separar {marcadas.size} {marcadas.size === 1 ? "fotografia" : "fotografias"} para um novo elemento sem
+                posição (depois indique a posição em Avaliar). Tem de ficar pelo menos uma fotografia neste elemento.
+              </p>
+              <div className="campo">
+                <label htmlFor="tecnico-separar">O seu nome</label>
+                <input
+                  id="tecnico-separar"
+                  autoComplete="name"
+                  value={tecnico}
+                  onChange={(evento) => aoMudarTecnico(evento.target.value)}
+                />
+              </div>
+              <div className="acoes">
+                {!aConfirmar && (
+                  <button
+                    type="button"
+                    className="botao"
+                    disabled={marcadas.size >= p.observacoes.length}
+                    onClick={() => setAConfirmar(true)}
+                  >
+                    Separar
+                  </button>
+                )}
+                {aConfirmar && (
+                  <>
+                    <button type="button" className="botao botao--perigo" onClick={confirmarSeparacao}>
+                      Confirmar: separar
+                    </button>
+                    <button type="button" className="botao botao--secundario" onClick={() => setAConfirmar(false)}>
+                      Cancelar
+                    </button>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+          <div className="estado-guardar" role={mensagem?.tipo === "erro" ? "alert" : "status"}>
+            {mensagem && <p className={mensagem.tipo === "erro" ? "mensagem--erro" : "mensagem--ok"}>{mensagem.texto}</p>}
+          </div>
         </div>
       )}
     </section>

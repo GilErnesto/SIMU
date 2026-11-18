@@ -8,16 +8,17 @@ import { indiceCategoria, percentagem, rotuloClasse, rotuloEstado } from "./rotu
 
 function iconeGrupo(grupo) {
   const total= grupo.getChildCount();
+  const duplicado= grupo.getAllChildMarkers().some((marcador) => marcador.options.duplicado);
   return L.divIcon({
-    className: "grupo-caixa",
-    html: `<span class="grupo"><span aria-hidden="true">${total}</span><span class="grupo__nome">${total} elementos</span></span>`,
+    className: duplicado ? "grupo-caixa grupo-caixa--duplicado" : "grupo-caixa",
+    html: `<span class="grupo"><span aria-hidden="true">${total}</span><span class="grupo__nome">${total} elementos${duplicado ? ", com possíveis duplicados" : ""}</span></span>`,
     iconSize: [44, 44],
     iconAnchor: [22, 22],
   });
 }
 
-function icone(indice, estado, ativo) {
-  const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}`;
+function icone(indice, estado, ativo, duplicado) {
+  const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}`;
   return L.divIcon({
     className: "pino-caixa",
     html: `<span class="${classes}"></span>`,
@@ -25,6 +26,8 @@ function icone(indice, estado, ativo) {
     iconAnchor: [22, 22],
   });
 }
+
+const SEM_DUPLICADOS= new Set();
 
 const ICONE_CANDIDATO= L.divIcon({
   className: "pino-caixa",
@@ -86,6 +89,7 @@ export default function Mapa({
   candidata,
   aoSelecionar,
   aoEscolherPosicao,
+  duplicadosIds= SEM_DUPLICADOS,
 }) {
   const [lonMin, latMin, lonMax, latMax]= config.bbox;
   const comPosicao= useMemo(() => features.filter((feature) => feature.geometry), [features]);
@@ -99,15 +103,18 @@ export default function Mapa({
         const p= feature.properties;
         const [lon, lat]= feature.geometry.coordinates;
         const nome= rotuloClasse(config, p.categoria, p.classe);
+        const duplicado= duplicadosIds.has(p.id);
         return {
           id: p.id,
+          duplicado,
           posicao: [lat, lon],
-          titulo: `${nome}, ${rotuloEstado(p.estado)}, confiança ${percentagem(p.confianca)}`,
-          icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId),
+          titulo: `${nome}, ${rotuloEstado(p.estado)}, confiança ${percentagem(p.confianca)}${duplicado ? ", possível duplicado" : ""}`,
+          icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId, duplicado),
         };
       }),
-    [config, comPosicao, selecionadoId],
+    [config, comPosicao, selecionadoId, duplicadosIds],
   );
+  const chaveDuplicados= useMemo(() => [...duplicadosIds].sort((x, y) => x - y).join(","), [duplicadosIds]);
   const posicaoCandidata=
     candidata && Number.isFinite(candidata.lat) && Number.isFinite(candidata.lon)
       ? [candidata.lat, candidata.lon]
@@ -125,13 +132,14 @@ export default function Mapa({
       <AjustarVista features={comPosicao} bbox={config.bbox} />
       <Foco alvo={foco} />
       <EscolherPosicao ativo={modoMover} aoEscolher={aoEscolherPosicao} />
-      <MarkerClusterGroup iconCreateFunction={iconeGrupo} showCoverageOnHover={false}>
+      <MarkerClusterGroup key={chaveDuplicados} iconCreateFunction={iconeGrupo} showCoverageOnHover={false}>
         {marcadores.map((m) => (
           <Marker
             key={m.id}
             position={m.posicao}
             icon={m.icone}
             title={m.titulo}
+            duplicado={m.duplicado}
             eventHandlers={{
               click: () => aoSelecionar(m.id, "mapa"),
               keydown: (evento) => {

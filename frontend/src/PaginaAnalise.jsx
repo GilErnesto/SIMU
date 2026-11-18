@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   corrigirElemento,
+  juntarElementos,
   ligacaoExportacao,
+  listarDuplicados,
   listarElementos,
   obterAnalise,
   obterConfig,
   obterElemento,
+  separarElemento,
 } from "./api.js";
 import Avaliar from "./Avaliar.jsx";
 import Divisor from "./Divisor.jsx";
+import Duplicados from "./Duplicados.jsx";
 import Filtros, { FILTROS_VAZIOS, contarFiltros } from "./Filtros.jsx";
 import Fotos from "./Fotos.jsx";
 import ListaElementos from "./ListaElementos.jsx";
@@ -34,6 +38,15 @@ function guardar(chave, valor) {
   } catch {
     return;
   }
+}
+
+function distanciaMetros(lat1, lon1, lat2, lon2) {
+  const raio= 6371000;
+  const rad= (graus) => (graus * Math.PI) / 180;
+  const dLat= rad(lat2 - lat1);
+  const dLon= rad(lon2 - lon1);
+  const a= Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * raio * Math.asin(Math.sqrt(a));
 }
 
 function Avisos({ avisos }) {
@@ -92,6 +105,16 @@ export default function PaginaAnalise({ token }) {
   const [tentativaConfig, setTentativaConfig]= useState(0);
   const [tentativaLista, setTentativaLista]= useState(0);
   const [tentativaDetalhe, setTentativaDetalhe]= useState(0);
+  const [duplicados, setDuplicados]= useState({ estado: "a-carregar", pares: [] });
+  const [duplicadosAbertos, setDuplicadosAbertos]= useState(false);
+  const [dispensados, setDispensados]= useState(() => {
+    try {
+      return new Set(JSON.parse(ler(`simu.dispensados.${token}`, "[]")));
+    } catch {
+      return new Set();
+    }
+  });
+  const [tentativaDuplicados, setTentativaDuplicados]= useState(0);
   const gatilho= useRef(null);
   const analise= pedido.fase === "ok" ? pedido.dados : null;
   const concluida= analise?.estado === "concluida";
@@ -156,6 +179,60 @@ export default function PaginaAnalise({ token }) {
     return () => controlo.abort();
   }, [selecionadoId, tentativaDetalhe]);
 
+  useEffect(() => {
+    if (!concluida) return undefined;
+    const controlo= new AbortController();
+    setDuplicados((anterior) => ({ ...anterior, estado: "a-carregar" }));
+    listarDuplicados(token, controlo.signal)
+      .then((dados) => setDuplicados({ estado: "ok", pares: Array.isArray(dados) ? dados : [] }))
+      .catch((erro) => {
+        if (erro.name !== "AbortError") setDuplicados({ estado: "erro", pares: [] });
+      });
+    return () => controlo.abort();
+  }, [concluida, token, tentativaLista, tentativaDuplicados]);
+
+  const paresVisiveis= useMemo(
+    () => duplicados.pares.filter((par) => !dispensados.has(`${par.a}-${par.b}`)),
+    [duplicados.pares, dispensados],
+  );
+
+  const duplicadosIds= useMemo(() => {
+    const ids= new Set();
+    paresVisiveis.forEach((par) => {
+      ids.add(par.a);
+      ids.add(par.b);
+    });
+    return ids;
+  }, [paresVisiveis]);
+
+  const vizinhos= useMemo(() => {
+    if (detalhe.estado !== "ok" || !detalhe.dados.geometry) return [];
+    const { categoria }= detalhe.dados.properties;
+    const [lon0, lat0]= detalhe.dados.geometry.coordinates;
+    return lista.features
+      .filter(
+        (f) =>
+          f.geometry &&
+          f.properties.id !== selecionadoId &&
+          f.properties.categoria === categoria &&
+          f.properties.estado !== "rejeitado",
+      )
+      .map((f) => {
+        const [lon, lat]= f.geometry.coordinates;
+        return { propriedades: f.properties, distancia: distanciaMetros(lat0, lon0, lat, lon) };
+      })
+      .filter((vizinho) => vizinho.distancia <= 15)
+      .sort((a, b) => a.distancia - b.distancia)
+      .map(({ propriedades: p, distancia }) => ({
+        id: p.id,
+        categoria: p.categoria,
+        classe: p.classe,
+        distancia,
+        n_observacoes: p.n_observacoes,
+        confianca: p.confianca,
+      }));
+  }, [lista.features, detalhe, selecionadoId]);
+
   const fecharAvaliar= useCallback(() => {
     setAvaliar(false);
     setModoMover(false);
@@ -174,13 +251,17 @@ export default function PaginaAnalise({ token }) {
   useEffect(() => {
     function aoPremir(evento) {
       if (evento.key !== "Escape") return;
+      if (duplicadosAbertos) {
+        setDuplicadosAbertos(false);
+        return;
+      }
       if (filtrosAbertos) setFiltrosAbertos(false);
       else if (avaliar) fecharAvaliar();
       else if (selecionadoId !== null) desselecionar();
     }
     window.addEventListener("keydown", aoPremir);
     return () => window.removeEventListener("keydown", aoPremir);
-  }, [filtrosAbertos, avaliar, selecionadoId, fecharAvaliar, desselecionar]);
+  }, [duplicadosAbertos, filtrosAbertos, avaliar, selecionadoId, fecharAvaliar, desselecionar]);
 
   const selecionar= useCallback(
     (id, origem) => {
@@ -228,6 +309,36 @@ export default function PaginaAnalise({ token }) {
     guardar("simu.fotos", String(valor));
   }
 
+  function dispensar(par) {
+    const proximos= new Set(dispensados);
+    proximos.add(`${par.a}-${par.b}`);
+    guardar(`simu.dispensados.${token}`, JSON.stringify([...proximos]));
+    setDispensados(proximos);
+  }
+
+  async function juntar(destino, origem, autor) {
+    const dados= await juntarElementos(destino, origem, autor);
+    setTentativaLista((n) => n + 1);
+    if (selecionadoId === destino) setDetalhe({ estado: "ok", dados });
+    if (selecionadoId === origem) setSelecionadoId(destino);
+  }
+
+  async function separar(observacoes, autor) {
+    const resposta= await separarElemento(selecionadoId, observacoes, autor);
+    setDetalhe({ estado: "ok", dados: resposta.original });
+    setTentativaLista((n) => n + 1);
+  }
+
+  function verNoMapa(par) {
+    const feature= lista.features.find((f) => f.properties.id === par.a);
+    if (feature?.geometry) {
+      const [lon, lat]= feature.geometry.coordinates;
+      setFoco({ lat, lon });
+    }
+    setDuplicadosAbertos(false);
+    selecionar(par.a, "lista");
+  }
+
   const cabecalho= (
     <header className="cabecalho">
       <Ligacao para="/" className="marca">
@@ -241,6 +352,15 @@ export default function PaginaAnalise({ token }) {
       )}
       {concluida && config.fase === "ok" && (
         <div className="cabecalho__acoes">
+          <button
+            type="button"
+            className="botao"
+            aria-haspopup="dialog"
+            disabled={!concluida}
+            onClick={() => setDuplicadosAbertos(true)}
+          >
+            Duplicados ({paresVisiveis.length})
+          </button>
           <button
             type="button"
             className="botao"
@@ -396,6 +516,7 @@ export default function PaginaAnalise({ token }) {
                 candidata={candidataNumeros}
                 aoSelecionar={selecionar}
                 aoEscolherPosicao={(lat, lon) => setCandidata({ lat: lat.toFixed(6), lon: lon.toFixed(6) })}
+                duplicadosIds={duplicadosIds}
               />
             </section>
             <Divisor valor={fotosPct} aoMudar={mudarDivisao} />
@@ -405,6 +526,9 @@ export default function PaginaAnalise({ token }) {
               detalhe={detalhe}
               aoAvaliar={abrirAvaliar}
               aoRepetir={() => setTentativaDetalhe((n) => n + 1)}
+              tecnico={tecnico}
+              aoMudarTecnico={mudarTecnico}
+              aoSeparar={separar}
             />
           </div>
         </section>
@@ -420,9 +544,26 @@ export default function PaginaAnalise({ token }) {
             aoFechar={fecharAvaliar}
             aoAlternarMover={() => setModoMover((ativo) => !ativo)}
             aoMudarCandidata={setCandidata}
+            vizinhos={vizinhos}
+            aoJuntar={(origem, autor) => juntar(selecionadoId, origem, autor)}
           />
         )}
       </main>
+      {duplicadosAbertos && (
+        <Duplicados
+          config={dadosConfig}
+          estado={duplicados.estado}
+          pares={duplicados.pares}
+          dispensados={dispensados}
+          tecnico={tecnico}
+          aoMudarTecnico={mudarTecnico}
+          aoJuntar={juntar}
+          aoDispensar={dispensar}
+          aoVerNoMapa={verNoMapa}
+          aoRepetir={() => setTentativaDuplicados((n) => n + 1)}
+          aoFechar={() => setDuplicadosAbertos(false)}
+        />
+      )}
     </div>
   );
 }

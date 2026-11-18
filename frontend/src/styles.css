@@ -581,3 +581,118 @@ select {
   color: var(--acento);
 }
 
+
+.pino--duplicado {
+  box-shadow: 0 0 0 1px var(--tinta), 0 0 0 4px #ffffff, 0 0 0 6px var(--erro);
+}
+
+.duplicados {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  overflow-y: auto;
+  padding: var(--espaco-4);
+  background: var(--painel);
+}
+
+.duplicados__cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-3);
+}
+
+.duplicados__nome {
+  max-width: 22rem;
+  margin-bottom: var(--espaco-4);
+}
+
+.duplicados__corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--espaco-4);
+}
+
+.duplicados__lista {
+  display: grid;
+  align-content: start;
+  gap: var(--espaco-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.duplicados__par {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--espaco-2) var(--espaco-3);
+  border: 1px solid var(--controlo);
+  border-radius: var(--raio);
+  background: var(--painel);
+  color: var(--tinta);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.duplicados__par:hover {
+  background: #eceef2;
+}
+
+.duplicados__par[aria-current="true"] {
+  border-color: var(--acento);
+  box-shadow: inset 0 0 0 2px var(--acento);
+  font-weight: 600;
+}
+
+.duplicados__par:focus-visible {
+  outline: 3px solid var(--tinta);
+  outline-offset: 2px;
+}
+
+.duplicados__lados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: var(--espaco-4);
+  margin-bottom: var(--espaco-4);
+}
+
+.fotos__marcar {
+  display: flex;
+  align-items: center;
+  gap: var(--espaco-2);
+  min-height: 44px;
+}
+
+.fotos__marcar input {
+  width: 22px;
+  height: 22px;
+}
+
+.fotos__separar {
+  position: sticky;
+  bottom: 0;
+  padding: var(--espaco-3);
+  border-top: 1px solid var(--linha);
+  background: var(--painel);
+}
+
+@media (min-width: 900px) {
+  .duplicados__corpo {
+    grid-template-columns: 18rem minmax(0, 1fr);
+  }
+}
+
+.grupo-caixa--duplicado .grupo {
+  box-shadow:
+    0 0 0 1px var(--tinta),
+    0 0 0 4px #ffffff,
+    0 0 0 6px var(--erro);
+}
+
+.estado-guardar + .duplicados__lados {
+  margin-top: var(--espaco-3);
+}
