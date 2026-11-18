@@ -13,6 +13,7 @@ from pipeline.geolocate.bearing import (
     vertical_fov,
 )
 from pipeline.geolocate.dedup import cluster
+from pipeline.geolocate.separar import fundir_proximos, separar_mesma_imagem
 from pipeline.geolocate.triangulate import (
     ALCANCE_MAX_M,
     DISTANCIA_MAX_ORIGENS_M,
@@ -217,6 +218,12 @@ def locate(
             [c for c, r in zip(candidatos, rotulos) if r == rotulo] for rotulo in sorted(set(rotulos.tolist()))
         ]
         grupos_c= _consenso(grupos_c, observacoes, origens, config)
+        grupos_c= [
+            separado
+            for membros in grupos_c
+            for separado in separar_mesma_imagem(membros, observacoes, origens, set(config.gerais), _monocular, config.altura_m)
+        ]
+        grupos_c= fundir_proximos(grupos_c, observacoes, config.raio_dedup_m)
         for membros in grupos_c:
             indices= sorted(set().union(*(m[1] for m in membros)))
             x, y= np.mean([m[0] for m in membros], axis=0)
