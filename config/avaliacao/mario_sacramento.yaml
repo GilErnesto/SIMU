@@ -1,0 +1,7 @@
+nome: Aveiro
+bbox:
+  lon_min: -8.6500
+  lat_min: 40.6272
+  lon_max: -8.6468
+  lat_max: 40.6340
+crs_metrico: EPSG:3763
