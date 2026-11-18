@@ -1,5 +1,6 @@
 import io
 import json
+import threading
 from datetime import UTC, datetime
 
 import cv2
@@ -183,3 +184,67 @@ def test_download_desiste_depois_das_tentativas(jpg):
         mapillary.download(_registo("a"), sessao)
     assert sessao.pedidos == 3
     assert "http://img" not in str(erro.value)
+
+
+def test_descarrega_a_seguinte_enquanto_processa_a_atual(tmp_path):
+    seguinte= threading.Event()
+
+    def baixar(registo):
+        if registo.id_fonte == "b":
+            seguinte.set()
+        return np.zeros((40, 60, 3), dtype=np.uint8)
+
+    class EsperaPelaSeguinte(Anonimizador):
+        def __call__(self, imagem):
+            if self.chamadas == 0:
+                assert seguinte.wait(2), "a imagem seguinte não foi descarregada durante a primeira"
+            return super().__call__(imagem)
+
+    resultado, falhas, _, _= _executar(
+        tmp_path, [_registo("a"), _registo("b"), _registo("c")], baixar, anonimizador=EsperaPelaSeguinte()
+    )
+    assert sorted(resultado) == ["a", "b", "c"]
+    assert falhas == []
+
+
+def test_nunca_descarrega_mais_do_que_a_janela_a_frente(tmp_path):
+    from pipeline import run
+
+    descarregadas= []
+    pior= {"a_frente": 0}
+
+    def baixar(registo):
+        descarregadas.append(registo.id_fonte)
+        return np.zeros((40, 60, 3), dtype=np.uint8)
+
+    class MedeAFrente(Anonimizador):
+        def __call__(self, imagem):
+            pior["a_frente"]= max(pior["a_frente"], len(descarregadas) - self.chamadas - 1)
+            return super().__call__(imagem)
+
+    imagens= [_registo(f"i{n}") for n in range(30)]
+    resultado, _, _, _= _executar(tmp_path, imagens, baixar, anonimizador=MedeAFrente())
+    assert len(resultado) == 30
+    assert descarregadas.count("i0") == 1
+    assert pior["a_frente"] <= run.ADIANTE
+
+
+def test_a_ordem_dos_resultados_e_da_falha_e_a_das_imagens(tmp_path):
+    imagens= [_registo("a"), _registo("mau"), _registo("b"), _registo("mau2"), _registo("c")]
+
+    def baixar(registo):
+        if registo.id_fonte.startswith("mau"):
+            raise ErroPipeline("sem rede")
+        return np.zeros((40, 60, 3), dtype=np.uint8)
+
+    _, falhas, _, detetor= _executar(tmp_path, imagens, baixar)
+    assert falhas == ["mau", "mau2"]
+    assert detetor.vistas == ["mapillary:a", "mapillary:b", "mapillary:c"]
+
+
+def test_erro_inesperado_ao_descarregar_continua_a_propagar(tmp_path):
+    def baixar(registo):
+        raise RuntimeError("avaria")
+
+    with pytest.raises(RuntimeError, match="avaria"):
+        _executar(tmp_path, [_registo("a"), _registo("b")], baixar)
