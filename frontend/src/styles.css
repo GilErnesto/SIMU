@@ -160,6 +160,20 @@ select {
   background: transparent;
 }
 
+.botao--perigo {
+  background: var(--erro);
+  border-color: var(--erro);
+  color: #ffffff;
+}
+
+.botao--perigo:hover {
+  background: #8f1c13;
+}
+
+.botao--perigo:active {
+  background: #7a170f;
+}
+
 .botao[aria-pressed="true"] {
   background: var(--acento);
   border-color: var(--acento);

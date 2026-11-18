@@ -29,6 +29,8 @@ class Categoria:
     descricoes: dict[str, str | list[str]]= field(default_factory=dict)
     negativos: tuple[str, ...]= ()
     limiar_detecao: float= 0.0
+    alias: dict[str, str]= field(default_factory=dict)
+    combinar_confianca: bool= True
 
 
 @dataclass(frozen=True)
@@ -37,7 +39,7 @@ class Classes:
 
     def categoria_de(self, classe: str) -> Categoria | None:
         for categoria in self.categorias.values():
-            if classe in categoria.classes:
+            if classe in categoria.classes or classe in categoria.alias:
                 return categoria
         return None
 
@@ -85,6 +87,8 @@ def load_classes(path: Path) -> Classes:
                 descricoes=dict(campos.get("descricoes", {})),
                 negativos=tuple(campos.get("negativos", ())),
                 limiar_detecao=float(campos.get("limiar_detecao", 0.0)),
+                alias=dict(campos.get("alias", {})),
+                combinar_confianca=bool(campos.get("combinar_confianca", True)),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

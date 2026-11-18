@@ -107,6 +107,87 @@ def _repartir(gerais: set[str], observacoes: list[Observation]) -> list[tuple[st
     return list(grupos.items())
 
 
+TOLERANCIA_RAIO_M= 1.5
+
+
+def _passa_perto(obs, origem, ponto, tolerancia_m: float) -> bool:
+    dx, dy= direction(obs.bearing)
+    rx, ry= ponto[0] - origem[0], ponto[1] - origem[1]
+    return rx * dx + ry * dy > 0 and abs(rx * dy - ry * dx) <= tolerancia_m
+
+
+def _imagens(indices, observacoes) -> int:
+    return len({observacoes[i].image.id for i in indices})
+
+
+def _indices_de(membros) -> set:
+    return set().union(*(m[1] for m in membros))
+
+
+def _melhor_ponto(pares, livres, observacoes, origens):
+    melhor= None
+    for par in pares:
+        apoio= {i for i in livres if _passa_perto(observacoes[i], origens[i], par[0], TOLERANCIA_RAIO_M)}
+        chave= (_imagens(apoio, observacoes), len(apoio))
+        if chave[0] >= 2 and (melhor is None or chave > melhor[0]):
+            melhor= (chave, par, apoio)
+    return melhor
+
+
+def _consenso(grupos, observacoes, origens, config):
+    ordem= sorted(grupos, key=lambda m: -_imagens(_indices_de(m), observacoes))
+    usadas= set()
+    mantidos= []
+    for membros in ordem:
+        pares= [m for m in membros if m[2] == "triangulacao"]
+        livres= _indices_de(membros) - usadas
+        if not pares:
+            ficam= [m for m in membros if m[1] <= livres]
+            if ficam:
+                mantidos.append(ficam)
+                usadas|= _indices_de(ficam)
+            continue
+        centro= np.mean([m[0] for m in membros], axis=0)
+        perto= {i for i in livres if _passa_perto(observacoes[i], origens[i], centro, TOLERANCIA_RAIO_M)}
+        ficam= [m for m in membros if m[1] <= perto]
+        if any(m[2] == "triangulacao" for m in ficam):
+            mantidos.append(ficam)
+            usadas|= _indices_de(ficam)
+            continue
+        while True:
+            melhor= _melhor_ponto(pares, livres, observacoes, origens)
+            if melhor is None:
+                break
+            _, par, apoio= melhor
+            ficam= [m for m in pares if m[1] <= apoio]
+            ficam+= [(par[0], {i}, "triangulacao") for i in apoio - _indices_de(ficam)]
+            mantidos.append(ficam)
+            livres-= apoio
+            usadas|= apoio
+    soltas= []
+    for i, obs in enumerate(observacoes):
+        if i in usadas:
+            continue
+        ponto= _monocular(obs, origens[i], config.altura_m)
+        if ponto is not None:
+            soltas.append((ponto, {i}, "monocular"))
+    if soltas:
+        centros= np.array([np.mean([m[0] for m in g], axis=0) for g in mantidos]) if mantidos else None
+        isoladas= []
+        for s in soltas:
+            if centros is not None:
+                d= np.hypot(*(centros - np.array(s[0])).T)
+                if d.min() <= config.raio_dedup_m:
+                    mantidos[int(d.argmin())].append(s)
+                    continue
+            isoladas.append(s)
+        if isoladas:
+            rotulos= cluster(np.array([s[0] for s in isoladas]), config.raio_dedup_m)
+            for rotulo in sorted(set(rotulos.tolist())):
+                mantidos.append([s for s, r in zip(isoladas, rotulos) if r == rotulo])
+    return mantidos
+
+
 def locate(
     images: list[ImageRecord],
     detections: list[Detection],
@@ -132,10 +213,13 @@ def locate(
             continue
         pontos= np.array([c[0] for c in candidatos])
         rotulos= cluster(pontos, config.raio_dedup_m)
-        for rotulo in sorted(set(rotulos.tolist())):
-            membros= [c for c, r in zip(candidatos, rotulos) if r == rotulo]
+        grupos_c= [
+            [c for c, r in zip(candidatos, rotulos) if r == rotulo] for rotulo in sorted(set(rotulos.tolist()))
+        ]
+        grupos_c= _consenso(grupos_c, observacoes, origens, config)
+        for membros in grupos_c:
             indices= sorted(set().union(*(m[1] for m in membros)))
-            x, y= pontos[rotulos == rotulo].mean(axis=0)
+            x, y= np.mean([m[0] for m in membros], axis=0)
             lon, lat= para_graus.transform(x, y)
             triangulado= any(m[2] == "triangulacao" for m in membros)
             incluidas= [observacoes[i] for i in indices]

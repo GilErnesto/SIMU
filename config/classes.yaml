@@ -76,15 +76,31 @@ categorias:
       - a car or a truck
   iluminacao:
     rotulo: Iluminação
-    raio_dedup_m: 5
-    altura_m: 8
+    raio_dedup_m: 6.5
+    altura_m: 6
     limiar_detecao: 0.3
     classes:
+      - luz
       - candeeiro
+      - poste_luz
+    gerais:
+      - luz
+    combinar_confianca: false
+    alias:
+      candeeiro: luz
     rotulos:
+      luz: Luz por classificar
       candeeiro: Candeeiro
+      poste_luz: Poste de luz
     consultas:
-      candeeiro: a street lamp post
+      luz: a street lamp post
+    descricoes:
+      candeeiro:
+        - a vintage street lantern
+        - an old-fashioned decorative street lamp
+      poste_luz:
+        - a modern street light pole
+        - a tall street lamp post
   residuos:
     rotulo: Resíduos
     raio_dedup_m: 10

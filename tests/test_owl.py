@@ -53,7 +53,7 @@ def _resultado(caixas, scores, etiquetas):
 def test_consultas_cobrem_a_taxonomia():
     detetor= _detetor(_resultado([], [], []))
     classes= {classe for _, classe in detetor.alvos}
-    assert {"outro", "semaforo", "candeeiro", "contentor", "papeleira"} <= classes
+    assert {"outro", "semaforo", "luz", "contentor", "papeleira"} <= classes
     assert "stop" not in classes
     assert len(detetor.alvos) == len(detetor.textos)
 

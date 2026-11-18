@@ -26,7 +26,11 @@ def test_superclasse_nunca_e_obstruida():
 
 
 def test_classe_sem_limiar_nao_e_obstruida():
-    assert resolve("candeeiro", 0.1, CLASSES) == ("iluminacao", "candeeiro", False)
+    assert resolve("luz", 0.1, CLASSES) == ("iluminacao", "luz", False)
+
+
+def test_nome_do_yolo_candeeiro_passa_a_luz_geral():
+    assert resolve("candeeiro", 0.9, CLASSES) == ("iluminacao", "luz", False)
 
 
 def test_classe_fora_da_taxonomia_e_ignorada():

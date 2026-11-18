@@ -54,6 +54,10 @@ export function obterAnalise(token, sinal) {
   return pedir(`/analises/${encodeURIComponent(token)}`, { signal: sinal });
 }
 
+export function apagarAnalise(token) {
+  return pedir(`/analises/${encodeURIComponent(token)}`, { method: "DELETE" });
+}
+
 export function enviarAnalise({ ficheiros, nome, offsetS, fps }, aoProgredir) {
   return new Promise((resolver, rejeitar) => {
     const dados= new FormData();

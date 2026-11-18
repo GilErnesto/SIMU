@@ -18,7 +18,7 @@ SINAIS_GENERICOS= (
 )
 SINAIS_COSTAS= ("object--traffic-sign--back", "object--traffic-sign--direction-back")
 OBJETOS= {
-    "object--street-light": ("iluminacao", "candeeiro"),
+    "object--street-light": ("iluminacao", "luz"),
     "object--trash-can": ("residuos", "papeleira"),
 }
 

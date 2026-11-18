@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 import cv2
@@ -22,10 +23,13 @@ from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.ingest import mapillary
+from pipeline.leitura import ler_adiante
 from pipeline.models import Detection, ImageRecord
 
 FONTES= ("mapillary",)
 PASSO_PROGRESSO= 25
+ADIANTE= 2
+PREPARADORES= 2
 NOME_CHECKPOINT= "checkpoint.jsonl"
 CABECA_SINAL= "models/tipo_sinal.npz"
 
@@ -66,6 +70,23 @@ def _anonima_em_disco(registo: ImageRecord, pasta_anon: Path) -> np.ndarray | No
     return cv2.imread(str(caminho))
 
 
+def _preparar(
+    registo: ImageRecord,
+    guardadas: dict,
+    pasta_anon: Path,
+    baixar: Callable[[ImageRecord], np.ndarray],
+) -> tuple[str, np.ndarray | ErroPipeline | None]:
+    if registo.id_fonte in guardadas:
+        return "guardada", None
+    anonima= _anonima_em_disco(registo, pasta_anon)
+    if anonima is not None:
+        return "anonima", anonima
+    try:
+        return "original", baixar(registo)
+    except ErroPipeline as erro:
+        return "falha", erro
+
+
 def processar(
     imagens: list[ImageRecord],
     anonimizador: Callable[[np.ndarray], np.ndarray],
@@ -80,24 +101,23 @@ def processar(
     resultado= {}
     falhas= []
     inicio= time.time()
-    for n, registo in enumerate(imagens, 1):
+    preparar= partial(_preparar, guardadas=guardadas, pasta_anon=pasta_anon, baixar=baixar)
+    for n, (registo, (modo, conteudo)) in enumerate(ler_adiante(preparar, imagens, PREPARADORES, janela=ADIANTE), 1):
         if ao_progredir is not None:
             ao_progredir(n - 1, len(imagens))
-        if registo.id_fonte in guardadas:
+        if modo == "guardada":
             resultado[registo.id_fonte]= guardadas[registo.id_fonte]
             continue
-        anonima= _anonima_em_disco(registo, pasta_anon)
-        if anonima is None:
-            try:
-                original= baixar(registo)
-            except ErroPipeline as erro:
-                falhas.append(registo.id_fonte)
-                print(f"Aviso: {erro}", file=saida)
-                continue
-            anonima= anonimizador(original)
-            del original
+        if modo == "falha":
+            falhas.append(registo.id_fonte)
+            print(f"Aviso: {conteudo}", file=saida)
+            continue
+        if modo == "original":
+            anonima= anonimizador(conteudo)
+            del conteudo
             registo.caminho_anon= save_anon(anonima, pasta_anon, registo)
         else:
+            anonima= conteudo
             registo.caminho_anon= str(caminho_anon(pasta_anon, registo))
         registo.height, registo.width= anonima.shape[:2]
         if registo.camera_type == "spherical":

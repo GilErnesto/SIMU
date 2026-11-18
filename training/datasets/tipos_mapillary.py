@@ -14,9 +14,9 @@ from pipeline.config import load_municipio
 from pipeline.errors import ErroPipeline
 from pipeline.ingest import mapillary
 from pipeline.ingest.vectortile import caixa_normalizada
+from pipeline.leitura import ler_adiante
 from pipeline.models import ImageRecord
 from pipeline.rotulos_mapillary import classificar
-from training.datasets.yolo import ler_adiante
 
 URL_DETECOES= "https://graph.mapillary.com/{id}/detections"
 TENTATIVAS= 3
