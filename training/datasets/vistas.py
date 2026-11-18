@@ -7,12 +7,12 @@ from pathlib import Path
 
 import cv2
 
+from pipeline.leitura import ler_adiante
 from training.datasets.openimages import NOMES
 from training.datasets.yolo import (
     escrever_data_yaml,
     escrever_data_yaml_conjunto,
     guardar_exemplo,
-    ler_adiante,
 )
 
 SINAIS= (

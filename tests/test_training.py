@@ -8,12 +8,12 @@ import numpy as np
 import pytest
 import yaml
 
+from pipeline.leitura import ler_adiante
 from training.datasets import mtsd, openimages, vistas
 from training.datasets.yolo import (
     escrever_data_yaml,
     escrever_data_yaml_conjunto,
     guardar_exemplo,
-    ler_adiante,
     linhas_yolo,
     reduzir,
 )

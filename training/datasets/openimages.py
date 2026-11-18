@@ -9,7 +9,8 @@ import cv2
 import numpy as np
 import requests
 
-from training.datasets.yolo import escrever_data_yaml, guardar_exemplo, ler_adiante
+from pipeline.leitura import ler_adiante
+from training.datasets.yolo import escrever_data_yaml, guardar_exemplo
 
 BASE= "https://storage.googleapis.com/openimages"
 META= {
