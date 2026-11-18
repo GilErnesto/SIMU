@@ -33,7 +33,7 @@ X0, Y0= PARA_METROS.transform(-8.66, 40.633)
         ("object--traffic-sign--front", ("sinal", "outro")),
         ("other-sign", ("sinal", "outro")),
         ("object--traffic-light--pedestrians-back", ("sinal", "semaforo")),
-        ("object--street-light", ("iluminacao", "candeeiro")),
+        ("object--street-light", ("iluminacao", "luz")),
         ("object--trash-can", ("residuos", "papeleira")),
         ("object--traffic-sign--back", None),
         ("complementary--chevron-left--g1", None),
@@ -125,5 +125,5 @@ def test_para_pontos_e_geojson():
     assert len(colecao["features"]) == 1
     propriedades= colecao["features"][0]["properties"]
     assert propriedades["categoria"] == "iluminacao"
-    assert propriedades["classe"] == "candeeiro"
+    assert propriedades["classe"] == "luz"
     assert propriedades["origem"] == "mapillary_map_features"

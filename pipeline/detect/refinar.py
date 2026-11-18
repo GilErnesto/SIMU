@@ -129,9 +129,10 @@ class DuasFases:
                     descartadas.add(posicao)
                     continue
                 original= detecoes[posicao]
+                combinar= self.classes.categorias[original.category].combinar_confianca
                 resultado[posicao]= replace(
                     original,
                     class_name=classe,
-                    confidence=math.sqrt(original.confidence * probabilidade),
+                    confidence=math.sqrt(original.confidence * probabilidade) if combinar else original.confidence,
                 )
         return [d for posicao, d in enumerate(resultado) if posicao not in descartadas]

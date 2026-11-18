@@ -80,11 +80,27 @@ categorias:
     altura_m: 6
     limiar_detecao: 0.3
     classes:
+      - luz
       - candeeiro
+      - poste_luz
+    gerais:
+      - luz
+    combinar_confianca: false
+    alias:
+      candeeiro: luz
     rotulos:
+      luz: Luz por classificar
       candeeiro: Candeeiro
+      poste_luz: Poste de luz
     consultas:
-      candeeiro: a street lamp post
+      luz: a street lamp post
+    descricoes:
+      candeeiro:
+        - an ornate vintage street lantern with glass lamps on a decorative bracket
+        - a decorative classic street lamp fixed to a wall or on a short post
+      poste_luz:
+        - a tall modern street light pole with an arm and a lamp at the top
+        - a tall metal lamp post standing on the pavement
   residuos:
     rotulo: Resíduos
     raio_dedup_m: 10

@@ -11,6 +11,7 @@ def resolve(nome: str, confianca: float, classes: Classes) -> tuple[str, str, bo
     categoria= classes.categoria_de(nome)
     if categoria is None:
         return None
+    nome= categoria.alias.get(nome, nome)
     limiar= categoria.limiar_especifica
     genericas= set(categoria.superclasse.values()) | {categoria.superclasse_padrao}
     if limiar is None or nome in genericas or confianca >= limiar:

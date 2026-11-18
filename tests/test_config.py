@@ -20,6 +20,11 @@ def test_classes_reais():
     assert set(classes.categorias) == {"sinal", "iluminacao", "residuos"}
     assert classes.categoria_de("stop").nome == "sinal"
     assert classes.categoria_de("candeeiro").nome == "iluminacao"
+    assert classes.categoria_de("poste_luz").nome == "iluminacao"
+    assert classes.categorias["iluminacao"].classes == ("luz", "candeeiro", "poste_luz")
+    assert classes.categorias["iluminacao"].gerais == ("luz",)
+    assert classes.categorias["iluminacao"].alias == {"candeeiro": "luz"}
+    assert classes.categorias["iluminacao"].negativos == ()
     assert classes.categoria_de("inexistente") is None
     assert classes.categorias["residuos"].raio_dedup_m == 10
 

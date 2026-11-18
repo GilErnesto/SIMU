@@ -110,11 +110,12 @@ def test_probabilidade_baixa_mantem_o_geral():
     assert resultado[0].confidence == 0.64
 
 
-def test_so_refina_categorias_com_descricoes():
+def test_refina_as_deteccoes_da_mesma_categoria_num_so_lote():
     refinador= _refinador([_logits_para("sinal", "stop"), _logits_para("sinal", "stop")])
-    detecoes= [_det("sinal", "semaforo"), _det("iluminacao", "candeeiro"), _det("sinal", "outro")]
+    detecoes= [_det("sinal", "semaforo"), _det("sinal", "outro")]
     resultado= DuasFases(DetetorFalso(detecoes), refinador, CLASSES).detect("img", _imagem())
-    assert [d.class_name for d in resultado] == ["stop", "candeeiro", "stop"]
+    assert [d.class_name for d in resultado] == ["stop", "stop"]
+    assert len(refinador.processor.chamadas) == 1
     assert refinador.processor.chamadas[0][1] == 2
 
 
@@ -170,10 +171,35 @@ def test_negativo_com_pouca_probabilidade_mantem_a_deteccao():
     assert [d.class_name for d in resultado] == ["contentor"]
 
 
-def test_negativos_nao_afetam_categorias_sem_descricoes():
-    refinador= _refinador([_logits_negativo("sinal")])
-    fases= DuasFases(DetetorFalso([_det("iluminacao", "candeeiro")]), refinador, CLASSES)
+def test_luz_geral_passa_a_poste_de_luz_sem_mexer_na_confianca():
+    refinador= _refinador([_logits_para("iluminacao", "poste_luz")])
+    fases= DuasFases(DetetorFalso([_det("iluminacao", "luz", confianca= 0.2)]), refinador, CLASSES)
+    resultado= fases.detect("img", _imagem())
+    assert [d.class_name for d in resultado] == ["poste_luz"]
+    assert resultado[0].confidence == 0.2
+
+
+def test_luz_geral_passa_a_candeeiro():
+    refinador= _refinador([_logits_para("iluminacao", "candeeiro")])
+    fases= DuasFases(DetetorFalso([_det("iluminacao", "luz")]), refinador, CLASSES)
     assert [d.class_name for d in fases.detect("img", _imagem())] == ["candeeiro"]
+
+
+def test_luz_nunca_e_descartada_pelo_tipo():
+    refinador= _refinador([[0.0] * _total("iluminacao")], limiar= 0.3)
+    fases= DuasFases(DetetorFalso([_det("iluminacao", "luz")]), refinador, CLASSES)
+    assert len(fases.detect("img", _imagem())) == 1
+
+
+def test_luz_com_pouca_certeza_fica_luz_geral():
+    refinador= _refinador([[0.0] * _total("iluminacao")], limiar= 0.7)
+    fases= DuasFases(DetetorFalso([_det("iluminacao", "luz")]), refinador, CLASSES)
+    assert [d.class_name for d in fases.detect("img", _imagem())] == ["luz"]
+
+
+def test_sinal_continua_a_combinar_a_confianca_com_o_tipo():
+    assert CLASSES.categorias["sinal"].combinar_confianca is True
+    assert CLASSES.categorias["iluminacao"].combinar_confianca is False
 
 
 def test_varios_textos_do_mesmo_tipo_somam_a_probabilidade():
