@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.deps import anon_dir, get_classes, get_engine, get_municipio, get_session, raw_dir
-from pipeline.catalog import analises
+from pipeline.catalog import analises, revisao
 from pipeline.catalog.export import to_csv, to_feature, to_geojson
 from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao, ensure_schema
 from pipeline.config import Classes, Municipio
@@ -54,6 +54,16 @@ class CorrecaoPedido(BaseModel):
         if self.classe is None and self.lon is None and self.estado is None:
             raise ValueError("Nada para corrigir: indique classe, posição ou estado")
         return self
+
+
+class JuntarPedido(BaseModel):
+    autor: str= Field(min_length=1, max_length=128)
+    origem: int
+
+
+class SepararPedido(BaseModel):
+    autor: str= Field(min_length=1, max_length=128)
+    observacoes: list[int]
 
 
 def _bbox(valor: str | None) -> tuple[float, float, float, float] | None:
@@ -206,6 +216,26 @@ def corrigir(
         )
     sessao.commit()
     return _detalhe(_elemento(sessao, elemento_id))
+
+
+@app.post("/elementos/{elemento_id}/juntar")
+def juntar_elementos(elemento_id: int, pedido: JuntarPedido, sessao: Session= Depends(get_session)):
+    try:
+        revisao.juntar(sessao, elemento_id, pedido.origem, pedido.autor)
+    except revisao.ErroRevisao as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+    sessao.commit()
+    return _detalhe(_elemento(sessao, elemento_id))
+
+
+@app.post("/elementos/{elemento_id}/separar")
+def separar_elemento(elemento_id: int, pedido: SepararPedido, sessao: Session= Depends(get_session)):
+    try:
+        _, novo= revisao.separar(sessao, elemento_id, pedido.observacoes, pedido.autor)
+    except revisao.ErroRevisao as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+    sessao.commit()
+    return {"original": _detalhe(_elemento(sessao, elemento_id)), "novo": _detalhe(_elemento(sessao, novo.id))}
 
 
 @app.get("/imagens/{imagem_id}")
@@ -378,6 +408,19 @@ def obter_analise(token: str, sessao: Session= Depends(get_session)):
     if analise is None:
         raise HTTPException(404, "Análise não encontrada")
     return _analise_json(analise)
+
+
+@app.get("/analises/{token}/duplicados")
+def duplicados_da_analise(
+    token: str,
+    raio: float= Query(default=revisao.RAIO_DUPLICADOS_M, gt=0, le=30),
+    sessao: Session= Depends(get_session),
+    municipio: Municipio= Depends(get_municipio),
+):
+    analise= analises.obter_por_token(sessao, token)
+    if analise is None:
+        raise HTTPException(404, "Análise não encontrada")
+    return revisao.duplicados(sessao, analise.id, municipio.crs_metrico, raio)
 
 
 @app.delete("/analises/{token}")
