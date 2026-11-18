@@ -178,3 +178,101 @@ def test_filtro_por_classe(cliente, sessao):
     assert cliente.get(f"/elementos?analise={a.token}&classe=stop").json()["features"] == []
     assert len(cliente.get(f"/export.geojson?analise={a.token}&classe=candeeiro").json()["features"]) == 1
     assert cliente.get(f"/export.csv?analise={a.token}&classe=stop").text.count("\n") == 1
+
+
+def _analise_com_dados(sessao, nome, identificador, tmp_path, lon= -8.65, lat= 40.64):
+    analise= analises.criar(sessao, nome)
+    registo= _imagem(identificador)
+    anon= tmp_path / "anon"
+    anon.mkdir(exist_ok=True)
+    (anon / f"{identificador}.jpg").write_bytes(_jpeg())
+    write_catalog(sessao, CLASSES, [registo], [_elemento(registo, lon, lat)], analise_id=analise.id)
+    analises.atualizar_contagens(sessao, analise)
+    return analise
+
+
+def _contagens(sessao, analise_id):
+    from sqlalchemy import func, select
+
+    from pipeline.catalog.write import Correcao, Elemento, Imagem, Observacao
+
+    ids= select(Elemento.id).where(Elemento.analise_id == analise_id)
+    return {
+        "elementos": sessao.scalar(select(func.count(Elemento.id)).where(Elemento.analise_id == analise_id)),
+        "imagens": sessao.scalar(select(func.count(Imagem.id)).where(Imagem.analise_id == analise_id)),
+        "observacoes": sessao.scalar(select(func.count(Observacao.id)).where(Observacao.elemento_id.in_(ids))),
+        "correcoes": sessao.scalar(select(func.count(Correcao.id)).where(Correcao.elemento_id.in_(ids))),
+    }
+
+
+def test_apagar_analise_limpa_a_base_e_os_ficheiros(cliente, sessao, tmp_path):
+    a= _analise_com_dados(sessao, "A", "del-a", tmp_path)
+    b= _analise_com_dados(sessao, "B", "del-b", tmp_path, lon= -8.60, lat= 40.60)
+    elemento_id= cliente.get(f"/elementos?analise={a.token}").json()["features"][0]["properties"]["id"]
+    assert cliente.patch(f"/elementos/{elemento_id}", json={"estado": "validado", "autor": "Técnico"}).status_code == 200
+    assert _contagens(sessao, a.id) == {"elementos": 1, "imagens": 1, "observacoes": 1, "correcoes": 1}
+    pasta_raw= tmp_path / "raw" / a.token
+    pasta_raw.mkdir()
+    (pasta_raw / "foto.jpg").write_bytes(b"x")
+    resposta= cliente.delete(f"/analises/{a.token}")
+    assert resposta.status_code == 200
+    assert resposta.json() == {"elementos": 1, "imagens": 1, "ficheiros_por_apagar": 0}
+    assert _contagens(sessao, a.id) == {"elementos": 0, "imagens": 0, "observacoes": 0, "correcoes": 0}
+    assert cliente.get(f"/analises/{a.token}").status_code == 404
+    assert not (tmp_path / "anon" / "del-a.jpg").exists()
+    assert not pasta_raw.exists()
+    assert (tmp_path / "anon" / "del-b.jpg").exists()
+    assert _contagens(sessao, b.id) == {"elementos": 1, "imagens": 1, "observacoes": 1, "correcoes": 0}
+    assert cliente.get(f"/analises/{b.token}").status_code == 200
+    assert a.token not in {x["token"] for x in cliente.get("/analises").json()}
+
+
+def test_apagar_analise_desconhecida(cliente, sessao):
+    assert cliente.delete("/analises/nao-existe").status_code == 404
+
+
+def test_nao_se_apaga_uma_analise_a_ser_processada(cliente, sessao, tmp_path):
+    a= _analise_com_dados(sessao, "A", "proc-a", tmp_path)
+    a.estado= "a_processar"
+    sessao.commit()
+    resposta= cliente.delete(f"/analises/{a.token}")
+    assert resposta.status_code == 409
+    assert "processada" in resposta.json()["detail"]
+    assert _contagens(sessao, a.id)["elementos"] == 1
+    assert (tmp_path / "anon" / "proc-a.jpg").exists()
+
+
+def test_apagar_analise_na_fila_remove_os_ficheiros_enviados(cliente, sessao, tmp_path):
+    token= _enviar(cliente, [("a.jpg", _jpeg())], nome="Na fila").json()["token"]
+    assert (tmp_path / "raw" / token).is_dir()
+    assert cliente.delete(f"/analises/{token}").status_code == 200
+    assert not (tmp_path / "raw" / token).exists()
+    assert cliente.get(f"/analises/{token}").status_code == 404
+
+
+def test_apagar_so_toca_em_ficheiros_da_pasta_anonimizada(cliente, sessao, tmp_path):
+    from sqlalchemy import update
+
+    from pipeline.catalog.write import Imagem
+
+    a= _analise_com_dados(sessao, "A", "seg-a", tmp_path)
+    fora= tmp_path / "fora.jpg"
+    fora.write_bytes(b"nao apagar")
+    sessao.execute(update(Imagem).where(Imagem.analise_id == a.id).values(caminho_anon="../fora.jpg"))
+    sessao.commit()
+    assert cliente.delete(f"/analises/{a.token}").status_code == 200
+    assert fora.exists()
+
+
+def test_apagar_conta_os_ficheiros_que_nao_conseguiu_remover(cliente, sessao, tmp_path, monkeypatch):
+    a= _analise_com_dados(sessao, "A", "falha-a", tmp_path)
+
+    def recusar(self, *args, **kwargs):
+        raise PermissionError("só de leitura")
+
+    monkeypatch.setattr(Path, "unlink", recusar)
+    resposta= cliente.delete(f"/analises/{a.token}")
+    monkeypatch.undo()
+    assert resposta.status_code == 200
+    assert resposta.json()["ficheiros_por_apagar"] == 1
+    assert cliente.get(f"/analises/{a.token}").status_code == 404

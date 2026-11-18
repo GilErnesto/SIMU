@@ -32,7 +32,6 @@ services:
       - type: bind
         source: ./data/anon
         target: /app/data/anon
-        read_only: true
         bind:
           create_host_path: false
       - type: bind

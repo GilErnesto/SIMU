@@ -378,3 +378,22 @@ def obter_analise(token: str, sessao: Session= Depends(get_session)):
     if analise is None:
         raise HTTPException(404, "Análise não encontrada")
     return _analise_json(analise)
+
+
+@app.delete("/analises/{token}")
+def apagar_analise(token: str, sessao: Session= Depends(get_session)):
+    analise= sessao.scalar(select(Analise).where(Analise.token == token).with_for_update())
+    if analise is None:
+        raise HTTPException(404, "Análise não encontrada")
+    if analise.estado == "a_processar":
+        raise HTTPException(409, "A análise está a ser processada. Espere que acabe para a apagar.")
+    token_seguro= analise.token
+    elementos, imagens, ficheiros= analises.apagar(sessao, analise)
+    shutil.rmtree(raw_dir() / token_seguro, ignore_errors=True)
+    por_apagar= 0
+    for caminho in ficheiros:
+        try:
+            (anon_dir() / Path(caminho).name).unlink(missing_ok=True)
+        except OSError:
+            por_apagar+= 1
+    return {"elementos": elementos, "imagens": imagens, "ficheiros_por_apagar": por_apagar}

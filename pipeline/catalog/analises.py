@@ -1,10 +1,10 @@
 import secrets
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from pipeline.catalog.write import Analise, Elemento, Imagem
+from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao
 
 ESTADOS= ("na_fila", "a_processar", "concluida", "falhou")
 
@@ -102,3 +102,19 @@ def atualizar_contagens(sessao: Session, analise: Analise) -> None:
         sessao.scalar(select(func.count(Elemento.id)).where(Elemento.analise_id == analise.id)) or 0
     )
     sessao.commit()
+
+
+def apagar(sessao: Session, analise: Analise) -> tuple[int, int, list[str]]:
+    ids_elementos= select(Elemento.id).where(Elemento.analise_id == analise.id)
+    ficheiros= [
+        caminho
+        for caminho in sessao.scalars(select(Imagem.caminho_anon).where(Imagem.analise_id == analise.id))
+        if caminho
+    ]
+    sessao.execute(delete(Correcao).where(Correcao.elemento_id.in_(ids_elementos)))
+    sessao.execute(delete(Observacao).where(Observacao.elemento_id.in_(ids_elementos)))
+    elementos= sessao.execute(delete(Elemento).where(Elemento.analise_id == analise.id)).rowcount
+    imagens= sessao.execute(delete(Imagem).where(Imagem.analise_id == analise.id)).rowcount
+    sessao.execute(delete(Analise).where(Analise.id == analise.id))
+    sessao.commit()
+    return elementos, imagens, ficheiros
