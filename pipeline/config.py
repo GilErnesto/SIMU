@@ -7,6 +7,8 @@ import yaml
 
 from pipeline.errors import ErroPipeline
 
+ZONA_MAX_GRAUS= 0.02
+
 
 @dataclass(frozen=True)
 class Municipio:

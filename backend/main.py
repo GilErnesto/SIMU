@@ -18,7 +18,7 @@ from backend.deps import anon_dir, get_classes, get_engine, get_municipio, get_s
 from pipeline.catalog import analises, revisao
 from pipeline.catalog.export import to_csv, to_feature, to_geojson
 from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao, ensure_schema
-from pipeline.config import Classes, Municipio
+from pipeline.config import ZONA_MAX_GRAUS, Classes, Municipio, aplicar_bbox
 from pipeline.errors import ErroPipeline
 from pipeline.ingest.uploads import tipo_de
 
@@ -64,6 +64,11 @@ class JuntarPedido(BaseModel):
 class SepararPedido(BaseModel):
     autor: str= Field(min_length=1, max_length=128)
     observacoes: list[int]
+
+
+class ZonaPedido(BaseModel):
+    bbox: list[float]= Field(min_length=4, max_length=4)
+    nome: str= ""
 
 
 def _bbox(valor: str | None) -> tuple[float, float, float, float] | None:
@@ -385,7 +390,7 @@ async def criar_analise(
         shutil.rmtree(pasta, ignore_errors=True)
         raise
     if guardados["video"] and not guardados["gpx"]:
-        avisos.append("Enviou vídeo sem ficheiro GPX: sem ele não é possível localizar os elementos do vídeo")
+        avisos.append("Enviou vídeo sem ficheiro GPX: vai ser analisado, mas os elementos ficam sem posição no mapa")
     analise= analises.criar(
         sessao,
         nome.strip()[:120] or "Análise sem nome",
@@ -393,6 +398,26 @@ async def criar_analise(
         avisos,
         token=token,
     )
+    return {"token": analise.token, "url": f"/a/{analise.token}", "estado": analise.estado}
+
+
+@app.post("/analises/zona", status_code=201)
+def criar_analise_zona(
+    pedido: ZonaPedido,
+    sessao: Session= Depends(get_session),
+    municipio: Municipio= Depends(get_municipio),
+):
+    try:
+        zona= aplicar_bbox(municipio, ",".join(str(valor) for valor in pedido.bbox))
+    except ErroPipeline as erro:
+        raise HTTPException(422, str(erro)) from erro
+    lon_min, lat_min, lon_max, lat_max= zona.bbox
+    if lon_max - lon_min > ZONA_MAX_GRAUS or lat_max - lat_min > ZONA_MAX_GRAUS:
+        raise HTTPException(422, "A zona é grande demais: no máximo cerca de 2 km de lado.")
+    nome= pedido.nome.strip()[:120] or (
+        f"Mapillary, {(lat_min + lat_max) / 2:.4f}, {(lon_min + lon_max) / 2:.4f}"
+    )
+    analise= analises.criar(sessao, nome, {"fonte": "mapillary", "bbox": pedido.bbox})
     return {"token": analise.token, "url": f"/a/{analise.token}", "estado": analise.estado}
 
 
