@@ -2,7 +2,7 @@
 
 **Sistema de Identificação de Mobiliário Urbano.** Projeto do ATC Hackathon 2026 (Aveiro Tech City Hackathon), desafio 2, da Câmara Municipal de Aveiro e da Universidade de Aveiro.
 
-A aplicação deteta mobiliário urbano em imagens de rua (sinais de trânsito, candeeiros e postes de luz, contentores e ecopontos), calcula a posição de cada elemento, guarda-o num catálogo PostGIS, mostra-o num mapa onde um técnico o corrige, e exporta GeoJSON e CSV. Zona piloto: Rua da Pega, Bairro da Gulbenkian.
+A aplicação deteta mobiliário urbano em imagens de rua (sinais de trânsito, candeeiros e postes de luz, contentores e ecopontos), calcula a posição de cada elemento, guarda-o num catálogo PostGIS, mostra-o num mapa onde um técnico o corrige, e exporta GeoJSON e CSV. Zona piloto: Rua do ISCA até à Av. Dr. Mário Sacramento, em Aveiro.
 
 - Entrada: fotografias com GPS, vídeos com GPX, ou uma zona do Mapillary.
 - Privacidade: rostos e matrículas são desfocados (EgoBlur) antes de qualquer imagem ser gravada.
@@ -98,7 +98,7 @@ A interface fica em `http://localhost:5173` e fala com a API pelo prefixo `/api`
 ### Pipeline do Mapillary
 
 ```bash
-python -m pipeline.run --bbox -8.6625,40.6291,-8.6581,40.6382
+python -m pipeline.run --bbox -8.653933,40.630337,-8.648515,40.632975
 ```
 
 `--bbox` é `lon_min,lat_min,lon_max,lat_max` (longitude primeiro) e dispensa criar um `.yaml`: usa o município e o CRS de `config/municipio.yaml`. Sem `--bbox` usa a bbox desse ficheiro. Também existe em `pipeline.bancada` e `pipeline.referencia`.
@@ -111,6 +111,9 @@ Aparece como uma análise por zona. Imagens já registadas são ignoradas. Opç�
 - `PATCH /elementos/{id}`: corrige classe, posição ou estado. Cada alteração fica em `correcao`; nunca se apaga um elemento.
 - `GET /export.geojson` e `GET /export.csv`.
 - `POST /analises`, `GET /analises`, `GET /analises/{token}`, `DELETE /analises/{token}`.
+- `POST /analises/zona`: analisa uma zona do Mapillary (`{bbox: [lon_min, lat_min, lon_max, lat_max], nome}`, no máximo 0,02° de lado).
+- `GET /analises/{token}/duplicados`: pares da mesma categoria a menos de 4 m (`raio` muda a distância).
+- `POST /elementos/{id}/juntar` (`{origem, autor}`) e `POST /elementos/{id}/separar` (`{observacoes, autor}`): revisão manual, sempre registada em `correcao`.
 - `GET /imagens/{id}`: só serve ficheiros de `ANON_DIR`.
 
 ## Testes
@@ -181,9 +184,11 @@ python -m pipeline.bancada --fonte mapillary --municipio config/avaliacao/rossio
 ## Limitações conhecidas
 
 - Sem autenticação: o nome do técnico é texto livre.
-- Candeeiro ornamental contra poste de luz ainda é fraco (7 de 12 candeeiros certos); papeleiras também (recall de 19%).
+- Candeeiro contra poste de luz: só se distingue bem na zona onde a cabeça foi treinada; noutras zonas cerca de 8 a 11% dos postes de luz passam por candeeiro (números em `docs/avaliacao.md`). Candeeiros pequenos e longe, como os de um vídeo gravado do outro lado da estrada, não se distinguem. Papeleiras também são fracas (recall de 19%).
+- A câmara, ou uma cena parecida com um poste, pode aparecer como luz: o detetor não os distingue e o técnico rejeita-os em Avaliar.
+- Nos vídeos só se contam luzes a menos de 30 m da câmara (`alcance_max_m` em `config/classes.yaml`): as do outro lado de uma rua larga ficam de fora.
 - A distância monocular usa só a altura típica da categoria; o Depth Anything não está integrado.
-- O campo de visão das imagens em perspetiva é fixo (65°, em `pipeline/geolocate/bearing.py`).
+- O campo de visão das imagens em perspetiva é de 65° no lado maior da imagem (em `pipeline/geolocate/bearing.py`); a distância focal do EXIF não é lida.
 - Elementos sem posição (fotografias sem GPS, vídeos sem GPX) não se juntam entre imagens: aparecem repetidos.
 - O Mapillary limita cada pedido a 2000 imagens: com bbox grande, algumas podem ficar de fora. O KartaView não está implementado.
 - A referência de avaliação é automática (Mapillary), não anotada por pessoas.
