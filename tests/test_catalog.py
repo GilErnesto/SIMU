@@ -104,6 +104,16 @@ def test_elementos_distantes_ficam_separados(sessao):
 
 
 @precisa_bd
+def test_elementos_proximos_da_mesma_gravacao_nao_se_juntam(sessao):
+    a, b= _registo("t-g"), _registo("t-h")
+    write_catalog(
+        sessao, CLASSES, [a, b],
+        [_elemento(a, -8.65, 40.64, 0.8), _elemento(b, -8.65002, 40.64001, 0.8)],
+    )
+    assert sessao.query(Elemento).filter(Elemento.classe == "candeeiro").count() == 2
+
+
+@precisa_bd
 def test_observacao_guarda_confianca_calibrada_so_na_iluminacao(sessao):
     a= _registo("t-e")
     luz= _elemento(a, -8.65, 40.64, 0.8)
