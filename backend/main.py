@@ -32,7 +32,7 @@ async def ciclo_de_vida(_):
     yield
 
 
-app= FastAPI(title="Ctrl + F", lifespan=ciclo_de_vida)
+app= FastAPI(title="SIMU", lifespan=ciclo_de_vida)
 
 
 @app.exception_handler(ErroPipeline)
@@ -100,6 +100,13 @@ def _elemento(sessao: Session, elemento_id: int) -> Elemento:
     return elemento
 
 
+def _area(observacao: Observacao) -> float:
+    if not observacao.bbox or len(observacao.bbox) != 4:
+        return 0.0
+    x1, y1, x2, y2= observacao.bbox
+    return (x2 - x1) * (y2 - y1)
+
+
 def _detalhe(elemento: Elemento) -> dict:
     feature= to_feature(elemento)
     feature["properties"]["observacoes"]= [
@@ -119,7 +126,7 @@ def _detalhe(elemento: Elemento) -> dict:
                 "url": f"/imagens/{obs.imagem.id}" if obs.imagem.caminho_anon else None,
             },
         }
-        for obs in elemento.observacoes
+        for obs in sorted(elemento.observacoes, key=_area, reverse=True)
     ]
     return feature
 

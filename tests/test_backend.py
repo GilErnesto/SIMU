@@ -105,6 +105,20 @@ def test_listar_inclui_elementos_sem_posicao_com_geometria_nula(cliente, sessao)
 
 
 @precisa_bd
+def test_detalhe_mostra_primeiro_a_maior_caixa(cliente, sessao):
+    caixas= [(10, 10, 20, 30), (0, 0, 200, 400), (5, 5, 60, 100)]
+    registos= [_registo(f"ordem-{n}") for n in range(len(caixas))]
+    observacoes= [
+        Observation(Detection(r.id, "iluminacao", "poste_luz", caixa, 0.8, False), r, 10.0)
+        for r, caixa in zip(registos, caixas, strict=True)
+    ]
+    write_catalog(sessao, CLASSES, registos, [Element("iluminacao", "poste_luz", LON, LAT, False, "monocular", observacoes)])
+    elemento_id= sessao.scalars(select(Elemento).order_by(Elemento.id.desc())).first().id
+    obtidas= [o["bbox"] for o in cliente.get(f"/elementos/{elemento_id}").json()["properties"]["observacoes"]]
+    assert obtidas == [[0, 0, 200, 400], [5, 5, 60, 100], [10, 10, 20, 30]]
+
+
+@precisa_bd
 def test_detalhe_de_elemento_sem_posicao(cliente, sessao):
     sem= _criar_sem_posicao(sessao)
     dados= cliente.get(f"/elementos/{sem}").json()
