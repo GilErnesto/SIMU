@@ -13,6 +13,7 @@ from pipeline.geolocate.bearing import (
     vertical_fov,
 )
 from pipeline.geolocate.dedup import cluster
+from pipeline.geolocate.minimos import ponto_minimos_quadrados
 from pipeline.geolocate.separar import fundir_proximos, separar_mesma_imagem
 from pipeline.geolocate.triangulate import (
     ALCANCE_MAX_M,
@@ -189,6 +190,22 @@ def _consenso(grupos, observacoes, origens, config):
     return mantidos
 
 
+USAR_MINIMOS_QUADRADOS= False
+
+
+def _posicao(membros, observacoes, origens) -> tuple[float, float]:
+    media= tuple(np.mean([m[0] for m in membros], axis=0))
+    if not USAR_MINIMOS_QUADRADOS:
+        return media
+    indices= sorted(_indices_de([m for m in membros if m[2] == "triangulacao"]))
+    if _imagens(indices, observacoes) < 2:
+        return media
+    ponto= ponto_minimos_quadrados(
+        [origens[i] for i in indices], [observacoes[i].bearing for i in indices]
+    )
+    return media if ponto is None else ponto
+
+
 def locate(
     images: list[ImageRecord],
     detections: list[Detection],
@@ -226,7 +243,7 @@ def locate(
         grupos_c= fundir_proximos(grupos_c, observacoes, config.raio_dedup_m)
         for membros in grupos_c:
             indices= sorted(set().union(*(m[1] for m in membros)))
-            x, y= np.mean([m[0] for m in membros], axis=0)
+            x, y= _posicao(membros, observacoes, origens)
             lon, lat= para_graus.transform(x, y)
             triangulado= any(m[2] == "triangulacao" for m in membros)
             incluidas= [observacoes[i] for i in indices]
