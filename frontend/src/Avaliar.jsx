@@ -4,6 +4,7 @@ import { ImagemComCaixa } from "./Fotos.jsx";
 import { IconeFechar } from "./icones.jsx";
 import Juntar from "./Juntar.jsx";
 import { lerNumero, rotuloClasse, rotuloEstado } from "./rotulos.js";
+import { Ligacao } from "./rota.js";
 
 const FOTOS_NA_TIRA= 4;
 
@@ -17,7 +18,6 @@ export default function Avaliar({
   tecnico,
   modoMover,
   candidata,
-  aoMudarTecnico,
   aoGuardar,
   aoFechar,
   aoAlternarMover,
@@ -49,7 +49,7 @@ export default function Avaliar({
 
   function exigirNome() {
     if (tecnico.trim()) return true;
-    setMensagem({ tipo: "erro", texto: "Indique o seu nome antes de guardar." });
+    setMensagem({ tipo: "erro", texto: "Indique o nome do técnico na página inicial.", ligacao: true });
     return false;
   }
 
@@ -106,12 +106,6 @@ export default function Avaliar({
         <button type="button" className="botao botao--icone avaliar__fechar" aria-label="Fechar a avaliação" onClick={aoFechar}>
           <IconeFechar />
         </button>
-      </div>
-
-      <div className="campo avaliar__nome">
-        <label htmlFor="tecnico">O seu nome</label>
-        <input id="tecnico" autoComplete="name" value={tecnico} onFocus={aoFocar} onChange={(e) => aoMudarTecnico(e.target.value)} />
-        <span className="nota">Cada alteração fica registada com este nome.</span>
       </div>
 
       {fotos.length > 0 && (
@@ -207,6 +201,11 @@ export default function Avaliar({
 
       <div className="estado-guardar" role={mensagem?.tipo === "erro" ? "alert" : "status"}>
         {mensagem && <p className={mensagem.tipo === "erro" ? "mensagem--erro" : "mensagem--ok"}>{mensagem.texto}</p>}
+        {mensagem?.ligacao && (
+          <Ligacao para="/" className="botao botao--ligacao">
+            Ir para a página inicial
+          </Ligacao>
+        )}
       </div>
     </section>
   );

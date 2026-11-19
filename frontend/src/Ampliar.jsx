@@ -67,7 +67,7 @@ export default function Ampliar({ observacoes, indice, aoMudar, aoFechar }) {
           </button>
         )}
         <div className="ampliar__foto">
-          <Foto observacao={observacao} />
+          <Foto observacao={observacao} comZoom />
         </div>
         {total > 1 && (
           <button type="button" className="botao botao--icone" aria-label="Fotografia seguinte" onClick={seguinte}>

@@ -58,6 +58,14 @@ export function apagarAnalise(token) {
   return pedir(`/analises/${encodeURIComponent(token)}`, { method: "DELETE" });
 }
 
+export function criarAnaliseZona({ bbox, nome }) {
+  return pedir("/analises/zona", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bbox, nome }),
+  });
+}
+
 export function listarDuplicados(token, sinal) {
   return pedir(`/analises/${encodeURIComponent(token)}/duplicados`, { signal: sinal });
 }

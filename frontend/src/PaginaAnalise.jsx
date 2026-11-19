@@ -11,6 +11,7 @@ import {
   separarElemento,
 } from "./api.js";
 import Ampliar from "./Ampliar.jsx";
+import { guardar, ler } from "./armazenamento.js";
 import Avaliar from "./Avaliar.jsx";
 import ChipAvisos from "./ChipAvisos.jsx";
 import Divisor from "./Divisor.jsx";
@@ -25,22 +26,6 @@ import { Ligacao } from "./rota.js";
 import { ESTADOS_ANALISE, analiseEmCurso, lerNumero } from "./rotulos.js";
 
 const INTERVALO_MS= 3000;
-
-function ler(chave, padrao) {
-  try {
-    return localStorage.getItem(chave) ?? padrao;
-  } catch {
-    return padrao;
-  }
-}
-
-function guardar(chave, valor) {
-  try {
-    localStorage.setItem(chave, valor);
-  } catch {
-    return;
-  }
-}
 
 function distanciaMetros(lat1, lon1, lat2, lon2) {
   const raio= 6371000;
@@ -543,7 +528,6 @@ export default function PaginaAnalise({ token }) {
                   tecnico={tecnico}
                   modoMover={modoMover}
                   candidata={candidata}
-                  aoMudarTecnico={mudarTecnico}
                   aoGuardar={guardarCorrecao}
                   aoFechar={fecharAvaliar}
                   aoAlternarMover={() => setModoMover((ativo) => !ativo)}
@@ -575,7 +559,6 @@ export default function PaginaAnalise({ token }) {
           pares={duplicados.pares}
           dispensados={dispensados}
           tecnico={tecnico}
-          aoMudarTecnico={mudarTecnico}
           aoJuntar={juntar}
           aoDispensar={dispensar}
           aoVerNoMapa={verNoMapa}

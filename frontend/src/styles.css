@@ -696,12 +696,12 @@ select {
 
 .foto__moldura-fora {
   stroke: #ffffff;
-  stroke-width: 4px;
+  stroke-width: 2px;
 }
 
 .foto__moldura {
   stroke: #d500f9;
-  stroke-width: 2px;
+  stroke-width: 1px;
 }
 
 .foto__falta {
@@ -964,13 +964,87 @@ select {
   border-color: var(--acento);
 }
 
+.zoom {
+  --altura-max: 55dvh;
+  width: min(100%, calc(var(--altura-max) * var(--proporcao, 1.3333)));
+  margin-inline: auto;
+}
+
+.ampliar .zoom {
+  --altura-max: 70dvh;
+}
+
+.zoom__area {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--proporcao, 1.3333);
+  overflow: hidden;
+  background: #dfe7e6;
+  border-radius: var(--raio-controlo);
+  touch-action: none;
+  user-select: none;
+}
+
+.zoom__area:focus-visible {
+  outline: 3px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.zoom__camada {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+.zoom__camada img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.zoom__camada svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.zoom__camada rect {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.zoom__controlos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espaco-2);
+  margin-top: var(--espaco-2);
+}
+
+.zoom__nivel {
+  margin-inline-start: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .duplicados {
   position: fixed;
   inset: 0;
   z-index: 2100;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
   padding: var(--espaco-4);
+  overflow: hidden;
   background: var(--painel);
+}
+
+.duplicados > * {
+  flex: none;
 }
 
 .duplicados__cabeca {
@@ -980,15 +1054,26 @@ select {
   gap: var(--espaco-3);
 }
 
-.duplicados__nome {
-  max-width: 22rem;
-  margin-bottom: var(--espaco-4);
+.duplicados__corpo {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--espaco-3);
+  min-height: 0;
 }
 
-.duplicados__corpo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--espaco-4);
+.duplicados__pares {
+  flex: none;
+  max-height: 30dvh;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.duplicados__comparar {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--espaco-4);
 }
 
 .duplicados__lista {
@@ -1111,9 +1196,15 @@ select {
   gap: var(--espaco-2);
 }
 
-@media (min-width: 900px) {
+@media (min-width: 700px) {
   .duplicados__corpo {
-    grid-template-columns: 18rem minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .duplicados__pares {
+    max-height: none;
   }
 }
 

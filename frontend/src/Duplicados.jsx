@@ -5,6 +5,7 @@ import { Foto } from "./Fotos.jsx";
 import { percentagem, rotuloClasse } from "./rotulos.js";
 
 const FOTOS_POR_LADO= 2;
+const PARES_POR_LOTE= 20;
 
 function chaveDe(par) {
   return `${par.a}-${par.b}`;
@@ -55,7 +56,7 @@ function Lado({ config, id, rotulo, aoCarregar }) {
         Confiança {percentagem(p.confianca)}, {p.n_observacoes} {p.n_observacoes === 1 ? "fotografia" : "fotografias"}.
       </p>
       {p.observacoes.slice(0, FOTOS_POR_LADO).map((observacao) => (
-        <Foto key={observacao.id} observacao={observacao} />
+        <Foto key={observacao.id} observacao={observacao} comZoom zoomBotoes={false} />
       ))}
       {p.observacoes.length > FOTOS_POR_LADO && (
         <p className="nota">Mais {p.observacoes.length - FOTOS_POR_LADO} fotografias no painel de fotografias.</p>
@@ -64,14 +65,16 @@ function Lado({ config, id, rotulo, aoCarregar }) {
   );
 }
 
-export default function Duplicados({ config, estado, pares, dispensados, tecnico, aoMudarTecnico, aoJuntar, aoDispensar, aoVerNoMapa, aoRepetir, aoFechar }) {
+export default function Duplicados({ config, estado, pares, dispensados, tecnico, aoJuntar, aoDispensar, aoVerNoMapa, aoRepetir, aoFechar }) {
   const titulo= useRef(null);
   const [escolhido, setEscolhido]= useState(null);
   const [detalhes, setDetalhes]= useState({});
   const [aConfirmar, setAConfirmar]= useState(false);
   const [aGuardar, setAGuardar]= useState(false);
   const [mensagem, setMensagem]= useState(null);
+  const [limite, setLimite]= useState(PARES_POR_LOTE);
   const visiveis= pares.filter((par) => !dispensados.has(chaveDe(par)));
+  const mostrados= visiveis.slice(0, limite);
   const par= visiveis.find((candidato) => chaveDe(candidato) === escolhido) ?? null;
 
   useEffect(() => {
@@ -100,7 +103,7 @@ export default function Duplicados({ config, estado, pares, dispensados, tecnico
 
   async function confirmar() {
     if (!tecnico.trim()) {
-      setMensagem({ tipo: "erro", texto: "Indique o seu nome antes de juntar." });
+      setMensagem({ tipo: "erro", texto: "Indique o nome do técnico na página inicial antes de juntar." });
       setAConfirmar(false);
       return;
     }
@@ -132,10 +135,6 @@ export default function Duplicados({ config, estado, pares, dispensados, tecnico
         Pares de elementos da mesma categoria a poucos metros um do outro. Compare as fotografias e decida: juntar não
         apaga nada, o elemento juntado fica rejeitado e a decisão fica no histórico.
       </p>
-      <div className="campo duplicados__nome">
-        <label htmlFor="tecnico-duplicados">O seu nome</label>
-        <input id="tecnico-duplicados" autoComplete="name" value={tecnico} onChange={(e) => aoMudarTecnico(e.target.value)} />
-      </div>
 
       {estado === "a-carregar" && <p className="mensagem">A procurar duplicados.</p>}
       {estado === "erro" && (
@@ -154,25 +153,35 @@ export default function Duplicados({ config, estado, pares, dispensados, tecnico
 
       {estado === "ok" && visiveis.length > 0 && (
         <div className="duplicados__corpo">
-          <ol className="duplicados__lista" aria-label="Pares suspeitos">
-            {visiveis.map((candidato) => (
-              <li key={chaveDe(candidato)}>
-                <button
-                  type="button"
-                  className="duplicados__par"
-                  aria-current={chaveDe(candidato) === escolhido}
-                  onClick={() => setEscolhido(chaveDe(candidato))}
-                >
-                  <span>
-                    {rotuloClasse(config, candidato.categoria, candidato.classe_a)} {candidato.a} e {candidato.b}
-                  </span>
-                  <span className="nota">
-                    a {formatarMetros(candidato.distancia_m)}, {candidato.fotos_em_comum > 0 ? "na mesma fotografia" : "sem fotografia comum"}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
+          <div className="duplicados__pares">
+            <ol className="duplicados__lista" aria-label="Pares suspeitos">
+              {mostrados.map((candidato) => (
+                <li key={chaveDe(candidato)}>
+                  <button
+                    type="button"
+                    className="duplicados__par"
+                    aria-current={chaveDe(candidato) === escolhido}
+                    onClick={() => setEscolhido(chaveDe(candidato))}
+                  >
+                    <span>
+                      {rotuloClasse(config, candidato.categoria, candidato.classe_a)} {candidato.a} e {candidato.b}
+                    </span>
+                    <span className="nota">
+                      a {formatarMetros(candidato.distancia_m)}, {candidato.fotos_em_comum > 0 ? "na mesma fotografia" : "sem fotografia comum"}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+            <p className="nota">
+              A mostrar {mostrados.length} de {visiveis.length}.
+            </p>
+            {mostrados.length < visiveis.length && (
+              <button type="button" className="botao" onClick={() => setLimite((n) => n + PARES_POR_LOTE)}>
+                Mostrar mais
+              </button>
+            )}
+          </div>
 
           {par && (
             <section className="duplicados__comparar" aria-labelledby="titulo-comparar">
@@ -206,6 +215,7 @@ export default function Duplicados({ config, estado, pares, dispensados, tecnico
               <div className="estado-guardar" role={mensagem?.tipo === "erro" ? "alert" : "status"}>
                 {mensagem && <p className={mensagem.tipo === "erro" ? "mensagem--erro" : "mensagem--ok"}>{mensagem.texto}</p>}
               </div>
+              <p className="nota">Roda do rato para aproximar, duplo clique para 3x.</p>
               <div className="duplicados__lados">
                 <Lado key={`a-${par.a}`} config={config} id={par.a} rotulo={String(par.a)} aoCarregar={registar} />
                 <Lado key={`b-${par.b}`} config={config} id={par.b} rotulo={String(par.b)} aoCarregar={registar} />

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import ImagemComZoom from "./ImagemComZoom.jsx";
 import {
   FONTES,
   METODOS,
@@ -41,11 +42,16 @@ export function ImagemComCaixa({ observacao, descricao }) {
   );
 }
 
-export function Foto({ observacao, marcada, aoMarcar }) {
+export function Foto({ observacao, marcada, aoMarcar, comZoom= false, zoomBotoes= true }) {
   const { imagem }= observacao;
+  const descricao= "Imagem de rua anonimizada, com o elemento assinalado por um retângulo";
   return (
     <figure className="foto">
-      <ImagemComCaixa observacao={observacao} descricao="Imagem de rua anonimizada, com o elemento assinalado por um retângulo" />
+      {comZoom ? (
+        <ImagemComZoom observacao={observacao} descricao={descricao} botoes={zoomBotoes} />
+      ) : (
+        <ImagemComCaixa observacao={observacao} descricao={descricao} />
+      )}
       <figcaption>
         {legendaDe(imagem)}
         {imagem.url_origem && (
