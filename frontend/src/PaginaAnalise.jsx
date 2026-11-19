@@ -88,7 +88,7 @@ export default function PaginaAnalise({ token }) {
   const [ampliar, setAmpliar]= useState(null);
   const [filtrosAbertos, setFiltrosAbertos]= useState(false);
   const [avaliar, setAvaliar]= useState(false);
-  const [tecnico, setTecnico]= useState(() => ler("tecnico", ""));
+  const [tecnico]= useState(() => ler("tecnico", ""));
   const [modoMover, setModoMover]= useState(false);
   const [candidata, setCandidata]= useState(null);
   const [tentativaAnalise, setTentativaAnalise]= useState(0);
@@ -318,11 +318,6 @@ export default function PaginaAnalise({ token }) {
     setFiltros((atuais) => ({ ...atuais, ...alteracao }));
   }
 
-  function mudarTecnico(valor) {
-    setTecnico(valor);
-    guardar("tecnico", valor);
-  }
-
   function mudarDivisao(valor) {
     setFotosPct(valor);
     guardar("simu.fotos", String(valor));
@@ -543,7 +538,6 @@ export default function PaginaAnalise({ token }) {
                   detalhe={detalhe}
                   aoRepetir={() => setTentativaDetalhe((n) => n + 1)}
                   tecnico={tecnico}
-                  aoMudarTecnico={mudarTecnico}
                   aoSeparar={separar}
                   aoAmpliar={(indice) => setAmpliar({ indice })}
                 />

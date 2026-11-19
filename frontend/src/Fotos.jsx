@@ -10,6 +10,7 @@ import {
   rotuloClasse,
   rotuloEstado,
 } from "./rotulos.js";
+import { Ligacao } from "./rota.js";
 
 export function legendaDe(imagem) {
   const fonte= FONTES[imagem.fonte] ?? imagem.fonte;
@@ -118,7 +119,7 @@ function Creditos({ observacoes }) {
   );
 }
 
-export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecnico, aoMudarTecnico, aoSeparar, aoAmpliar }) {
+export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecnico, aoSeparar, aoAmpliar }) {
   const titulo= useRef(null);
   const [marcadas, setMarcadas]= useState(() => new Set());
   const [aConfirmar, setAConfirmar]= useState(false);
@@ -145,7 +146,7 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
 
   async function confirmar() {
     if (!tecnico.trim()) {
-      setMensagem({ tipo: "erro", texto: "Indique o seu nome antes de separar." });
+      setMensagem({ tipo: "erro", texto: "Indique o nome do técnico na página inicial antes de separar.", ligacao: true });
       setAConfirmar(false);
       return;
     }
@@ -226,10 +227,6 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
                 Separar {marcadas.size} {marcadas.size === 1 ? "fotografia" : "fotografias"} para um novo elemento sem posição (depois
                 indique a posição em Avaliar). Tem de ficar pelo menos uma fotografia neste elemento.
               </p>
-              <div className="campo">
-                <label htmlFor="tecnico-separar">O seu nome</label>
-                <input id="tecnico-separar" autoComplete="name" value={tecnico} onChange={(e) => aoMudarTecnico(e.target.value)} />
-              </div>
               <div className="acoes">
                 {!aConfirmar && (
                   <button type="button" className="botao" disabled={marcadas.size >= total} onClick={() => setAConfirmar(true)}>
@@ -251,6 +248,11 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
           )}
           <div className="estado-guardar" role={mensagem?.tipo === "erro" ? "alert" : "status"}>
             {mensagem && <p className={mensagem.tipo === "erro" ? "mensagem--erro" : "mensagem--ok"}>{mensagem.texto}</p>}
+            {mensagem?.ligacao && (
+              <Ligacao para="/" className="botao botao--ligacao">
+                Ir para a página inicial
+              </Ligacao>
+            )}
           </div>
         </div>
       )}
