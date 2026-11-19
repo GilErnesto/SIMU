@@ -1,6 +1,6 @@
 import bisect
 import itertools
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -91,6 +91,20 @@ def load_municipio(path: Path) -> Municipio:
     if lon_min >= lon_max or lat_min >= lat_max:
         raise ErroPipeline("bbox inválida: os mínimos têm de ser menores que os máximos")
     return Municipio(nome, (lon_min, lat_min, lon_max, lat_max), crs)
+
+
+def aplicar_bbox(municipio: Municipio, texto: str | None) -> Municipio:
+    if not texto:
+        return municipio
+    try:
+        lon_min, lat_min, lon_max, lat_max= (float(valor) for valor in texto.split(","))
+    except ValueError as erro:
+        raise ErroPipeline("--bbox deve ser lon_min,lat_min,lon_max,lat_max") from erro
+    if not (-180 <= lon_min and lon_max <= 180 and -90 <= lat_min and lat_max <= 90):
+        raise ErroPipeline("--bbox fora de limites: a ordem é lon_min,lat_min,lon_max,lat_max")
+    if lon_min >= lon_max or lat_min >= lat_max:
+        raise ErroPipeline("bbox inválida: os mínimos têm de ser menores que os máximos")
+    return replace(municipio, bbox=(lon_min, lat_min, lon_max, lat_max))
 
 
 def load_classes(path: Path) -> Classes:

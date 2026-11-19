@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from pipeline import checkpoint, evaluate
 from pipeline.catalog import analises
 from pipeline.catalog.write import Imagem, element_confidence
-from pipeline.config import Classes, calibrar_confianca, load_classes, load_municipio
+from pipeline.config import Classes, aplicar_bbox, calibrar_confianca, load_classes, load_municipio
 from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
@@ -150,6 +150,7 @@ def imagens_geojson(registos: list[ImageRecord]) -> dict:
 def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.bancada")
     parser.add_argument("--municipio", default="config/municipio.yaml")
+    parser.add_argument("--bbox", default=None, help="lon_min,lat_min,lon_max,lat_max: substitui a bbox do município, sem criar .yaml")
     parser.add_argument("--analise", default="inicial", help="token da análise cujas imagens se usam")
     parser.add_argument("--nome", required=True, help="nome da experiência (pasta de resultados)")
     parser.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
@@ -172,6 +173,7 @@ def main(argv: list[str] | None= None) -> int:
     load_dotenv()
     try:
         municipio= load_municipio(Path(args.municipio))
+        municipio= aplicar_bbox(municipio, args.bbox)
         classes= load_classes(Path(args.classes))
         if args.fonte == "mapillary":
             from pipeline.anonymize.egoblur import Anonymizer

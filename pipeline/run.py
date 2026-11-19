@@ -17,7 +17,7 @@ from pipeline import checkpoint
 from pipeline.anonymize.egoblur import Anonymizer, caminho_anon, save_anon
 from pipeline.catalog import analises
 from pipeline.catalog.write import anon_paths, ensure_schema, known_image_ids, write_catalog
-from pipeline.config import load_classes, load_municipio
+from pipeline.config import aplicar_bbox, load_classes, load_municipio
 from pipeline.detect.infer import Detector, Limiares
 from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
@@ -193,6 +193,7 @@ def _token_da_zona(municipio) -> str:
 def run(args: argparse.Namespace) -> int:
     municipio_path= Path(args.municipio)
     municipio= load_municipio(municipio_path)
+    municipio= aplicar_bbox(municipio, args.bbox)
     classes= load_classes(municipio_path.parent / "classes.yaml")
     token= _variavel("MAPILLARY_TOKEN")
     url_bd= _variavel("DATABASE_URL")
@@ -230,7 +231,8 @@ def run(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.run")
-    parser.add_argument("--municipio", required=True, help="ficheiro municipio.yaml")
+    parser.add_argument("--municipio", default="config/municipio.yaml", help="ficheiro municipio.yaml")
+    parser.add_argument("--bbox", default=None, help="lon_min,lat_min,lon_max,lat_max: substitui a bbox do município, sem criar .yaml")
     parser.add_argument("--fonte", choices=FONTES, default="mapillary")
     parser.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
     parser.add_argument("--limiar", type=float, default=0.2, help="confiança mínima do OWLv2")
