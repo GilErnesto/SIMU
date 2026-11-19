@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 
 from pipeline.errors import ErroPipeline
+from pipeline.geolocate.triangulate import ALCANCE_MAX_M
 
 ZONA_MAX_GRAUS= 0.02
 
@@ -36,6 +37,9 @@ class Categoria:
     alias: dict[str, str]= field(default_factory=dict)
     combinar_confianca: bool= True
     calibracao: tuple[tuple[float, float], ...]= ()
+    alcance_max_m: float= ALCANCE_MAX_M
+    seguir_video: bool= False
+    tipos_exclusivos: bool= False
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,9 @@ def load_classes(path: Path) -> Classes:
                 alias=dict(campos.get("alias", {})),
                 combinar_confianca=bool(campos.get("combinar_confianca", True)),
                 calibracao=_calibracao(campos),
+                alcance_max_m=float(campos.get("alcance_max_m", ALCANCE_MAX_M)),
+                seguir_video=bool(campos.get("seguir_video", False)),
+                tipos_exclusivos=bool(campos.get("tipos_exclusivos", False)),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

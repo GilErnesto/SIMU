@@ -5,6 +5,9 @@
 # negativos: textos de coisas parecidas que não contam: a deteção é descartada.
 # rotulo e rotulos: nomes mostrados na interface.
 # limiar_detecao: confiança mínima de uma deteção, por categoria.
+# alcance_max_m: observações estimadas mais longe são ignoradas (60 por omissão).
+# seguir_video: nos vídeos, segue cada caixa de frame em frame (um trilho, um elemento).
+# tipos_exclusivos: as classes são tipos alternativos do mesmo objeto (um elemento só tem um tipo).
 categorias:
   sinal:
     rotulo: Sinais
@@ -78,6 +81,9 @@ categorias:
     rotulo: Iluminação
     raio_dedup_m: 6.5
     altura_m: 6
+    alcance_max_m: 30
+    seguir_video: true
+    tipos_exclusivos: true
     limiar_detecao: 0.3
     classes:
       - luz

@@ -80,7 +80,7 @@ class Anonimizador:
 
 class Detetor:
     def detect(self, image_id, image):
-        return [Detection(image_id, "iluminacao", "candeeiro", (90.0, 40.0, 110.0, 60.0), 0.9, False)]
+        return [Detection(image_id, "iluminacao", "candeeiro", (90.0, 20.0, 110.0, 80.0), 0.9, False)]
 
 
 def _descarregar(registo):

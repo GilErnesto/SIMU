@@ -1,4 +1,5 @@
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -37,9 +38,19 @@ def test_bearing_volta_a_zero():
 
 
 def test_fov_esferico():
-    assert horizontal_fov("spherical") == 360
-    assert horizontal_fov("perspective") < 180
+    assert horizontal_fov("spherical", 4000, 2000) == 360
+    assert horizontal_fov("perspective", 1000, 800) < 180
     assert vertical_fov("spherical", 4000, 2000) == 180
+
+
+def test_fov_horizontal_igual_ao_antigo():
+    assert horizontal_fov("perspective", 1920, 1080) == 65
+    assert vertical_fov("perspective", 1920, 1080) == pytest.approx(65 * 1080 / 1920)
+
+
+def test_fov_de_video_vertical_fica_no_lado_maior():
+    assert horizontal_fov("perspective", 1080, 1920) == pytest.approx(65 * 1080 / 1920)
+    assert vertical_fov("perspective", 1080, 1920) == 65
 
 
 def test_distancia_monocular():
@@ -60,6 +71,22 @@ def test_raios_paralelos_ou_quase():
 
 def test_interseta_atras_da_camara():
     assert intersect((0, 0), 225, (10, 0), 135) is None
+
+
+def test_intersecao_respeita_o_alcance():
+    assert intersect((0, 0), 45, (10, 0), 315, alcance_m=8) is not None
+    assert intersect((0, 0), 45, (10, 0), 315, alcance_m=7) is None
+
+
+def test_alcance_por_omissao_e_60_e_a_luz_le_o_do_yaml():
+    assert CLASSES.categorias["sinal"].alcance_max_m == 60
+    assert CLASSES.categorias["iluminacao"].alcance_max_m <= 60
+
+
+def _com_alcance(alcance_m):
+    categorias= dict(CLASSES.categorias)
+    categorias["iluminacao"]= replace(categorias["iluminacao"], alcance_max_m=alcance_m)
+    return replace(CLASSES, categorias=categorias)
 
 
 def test_dbscan_junta_perto_e_separa_longe():
@@ -123,6 +150,26 @@ def test_deteccao_longe_demais_e_ignorada():
     x0, y0= _origem_metrica()
     a= _imagem("a", x0, y0, 0)
     assert locate([a], [_deteccao(a, y1=400, y2=401)], MUNICIPIO, CLASSES) == []
+
+
+def test_luz_alem_do_alcance_e_ignorada():
+    x0, y0= _origem_metrica()
+    a= _imagem("a", x0, y0, 0)
+    deteccao= _deteccao(a, y1=300, y2=476)
+    (elemento,)= locate([a], [deteccao], MUNICIPIO, _com_alcance(60))
+    _, y= PARA_METROS.transform(elemento.lon, elemento.lat)
+    assert 15 < y - y0 < 60
+    assert locate([a], [deteccao], MUNICIPIO, _com_alcance(15)) == []
+
+
+def test_triangulacao_alem_do_alcance_e_ignorada():
+    x0, y0= _origem_metrica()
+    a= _imagem("a", x0, y0, 45)
+    b= _imagem("b", x0 + 28, y0, 315)
+    detecoes= [_deteccao(a, y1=400, y2=410), _deteccao(b, y1=400, y2=410)]
+    (elemento,)= locate([a, b], detecoes, MUNICIPIO, _com_alcance(60))
+    assert elemento.metodo_geo == "triangulacao"
+    assert locate([a, b], detecoes, MUNICIPIO, _com_alcance(15)) == []
 
 
 def _det_com(imagem, categoria, classe, confianca, y1= 300, y2= 500):
@@ -280,3 +327,76 @@ def test_cada_raio_fica_num_so_candeeiro_de_uma_fila():
     posicoes= sorted(PARA_METROS.transform(e.lon, e.lat) for e in elementos)
     for obtida, esperada in zip(posicoes, sorted(candeeiros), strict=True):
         assert obtida == pytest.approx(esperada, abs=1.5)
+
+
+def _sem_tipos_exclusivos():
+    categorias= dict(CLASSES.categorias)
+    categorias["iluminacao"]= replace(categorias["iluminacao"], tipos_exclusivos=False)
+    return replace(CLASSES, categorias=categorias)
+
+
+def test_a_luz_declara_os_tipos_como_exclusivos_e_o_sinal_nao():
+    assert CLASSES.categorias["iluminacao"].tipos_exclusivos
+    assert not CLASSES.categorias["sinal"].tipos_exclusivos
+    assert not CLASSES.categorias["residuos"].tipos_exclusivos
+
+
+def test_um_poste_visto_com_dois_tipos_e_um_so_elemento():
+    x0, y0= _origem_metrica()
+    a, b, c= _tres_imagens(x0, y0)
+    d= _imagem("d", x0 + 5, y0 - 6, 0)
+    detecoes= [
+        _det_com(a, "iluminacao", "poste_luz", 0.9),
+        _det_com(b, "iluminacao", "poste_luz", 0.8),
+        _det_com(c, "iluminacao", "candeeiro", 0.7),
+        _det_com(d, "iluminacao", "candeeiro", 0.6),
+    ]
+    elementos= locate([a, b, c, d], detecoes, MUNICIPIO, CLASSES)
+    assert [e.class_name for e in elementos] == ["poste_luz"]
+    assert len(elementos[0].observations) == 4
+    assert len(locate([a, b, c, d], detecoes, MUNICIPIO, _sem_tipos_exclusivos())) == 2
+
+
+def test_duas_luzes_vizinhas_de_tipos_diferentes_na_mesma_foto_ficam_separadas():
+    x0, y0= _origem_metrica()
+    luzes= [(x0 + 4, y0 + 14), (x0 + 12, y0 + 14)]
+    meio= (x0 + 8, y0 + 14)
+    imagens= []
+    detecoes= []
+    for nome, dx in (("a", 0), ("b", 8), ("c", 16)):
+        origem= (x0 + dx, y0)
+        imagem= _imagem(nome, *origem, _rumo_para(origem, meio))
+        imagens.append(imagem)
+        for alvo, classe in zip(luzes, ("poste_luz", "candeeiro"), strict=True):
+            detecoes.append(replace(_caixa_para(imagem, origem, alvo), class_name=classe))
+    elementos= locate(imagens, detecoes, MUNICIPIO, CLASSES)
+    assert len(elementos) == 2
+    posicoes= sorted(PARA_METROS.transform(e.lon, e.lat) for e in elementos)
+    for obtida, esperada in zip(posicoes, sorted(luzes), strict=True):
+        assert obtida == pytest.approx(esperada, abs=1.5)
+
+
+def test_sinais_de_tipos_diferentes_no_mesmo_poste_continuam_separados():
+    x0, y0= _origem_metrica()
+    a, b, _= _tres_imagens(x0, y0)
+    detecoes= []
+    for imagem in (a, b):
+        detecoes.append(_det_com(imagem, "sinal", "stop", 0.9))
+        detecoes.append(_det_com(imagem, "sinal", "informacao", 0.8))
+    elementos= locate([a, b], detecoes, MUNICIPIO, CLASSES)
+    assert sorted(e.class_name for e in elementos) == ["informacao", "stop"]
+
+
+def test_duas_luzes_de_tipos_diferentes_so_com_estimativa_monocular_nao_ficam_no_mesmo_ponto():
+    x0, y0= _origem_metrica()
+    a= _imagem("a", x0, y0, 0)
+    detecoes= [
+        Detection(a.id, "iluminacao", "poste_luz", (430, 300, 470, 500), 0.9, False),
+        Detection(a.id, "iluminacao", "candeeiro", (530, 300, 570, 500), 0.8, False),
+    ]
+    for classes, minimo in ((CLASSES, 2.0), (_sem_tipos_exclusivos(), 0.0)):
+        elementos= locate([a], detecoes, MUNICIPIO, classes)
+        assert sorted(e.class_name for e in elementos) == ["candeeiro", "poste_luz"]
+        p, q= (PARA_METROS.transform(e.lon, e.lat) for e in elementos)
+        distancia= math.dist(p, q)
+        assert distancia >= minimo if classes is CLASSES else distancia < 0.5

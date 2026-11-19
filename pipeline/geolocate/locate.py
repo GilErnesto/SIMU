@@ -1,5 +1,6 @@
 import math
 from collections import Counter, defaultdict
+from functools import partial
 from itertools import combinations
 
 import numpy as np
@@ -14,6 +15,7 @@ from pipeline.geolocate.bearing import (
 )
 from pipeline.geolocate.dedup import cluster
 from pipeline.geolocate.minimos import ponto_minimos_quadrados
+from pipeline.geolocate.seguir import ordem_dos_frames, trilhos
 from pipeline.geolocate.separar import fundir_proximos, separar_mesma_imagem
 from pipeline.geolocate.triangulate import (
     ALCANCE_MAX_M,
@@ -26,23 +28,23 @@ from pipeline.models import Detection, Element, ImageRecord, Observation
 
 def _observe(detecao: Detection, imagem: ImageRecord) -> Observation:
     x1, _, x2, _= detecao.bbox_xyxy
-    fov= horizontal_fov(imagem.camera_type)
+    fov= horizontal_fov(imagem.camera_type, imagem.width, imagem.height)
     rumo= object_bearing(imagem.heading, (x1 + x2) / 2, imagem.width, fov)
     return Observation(detecao, imagem, rumo)
 
 
-def _monocular(obs: Observation, origem: tuple[float, float], altura_m: float):
+def _monocular(obs: Observation, origem: tuple[float, float], altura_m: float, alcance_m: float= ALCANCE_MAX_M):
     imagem= obs.image
     _, y1, _, y2= obs.detection.bbox_xyxy
     fov_v= vertical_fov(imagem.camera_type, imagem.width, imagem.height)
     distancia= monocular_distance(altura_m, y2 - y1, imagem.height, fov_v)
-    if distancia is None or distancia > ALCANCE_MAX_M:
+    if distancia is None or distancia > alcance_m:
         return None
     dx, dy= direction(obs.bearing)
     return origem[0] + distancia * dx, origem[1] + distancia * dy
 
 
-def _candidates(observacoes, origens, altura_m):
+def _candidates(observacoes, origens, altura_m, alcance_m):
     candidatos= []
     usadas= set()
     for i, j in combinations(range(len(observacoes)), 2):
@@ -50,13 +52,13 @@ def _candidates(observacoes, origens, altura_m):
             continue
         if math.dist(origens[i], origens[j]) > DISTANCIA_MAX_ORIGENS_M:
             continue
-        ponto= intersect(origens[i], observacoes[i].bearing, origens[j], observacoes[j].bearing)
+        ponto= intersect(origens[i], observacoes[i].bearing, origens[j], observacoes[j].bearing, alcance_m)
         if ponto is not None:
             candidatos.append((ponto, {i, j}, "triangulacao"))
             usadas.update((i, j))
     for i, obs in enumerate(observacoes):
         if i not in usadas:
-            ponto= _monocular(obs, origens[i], altura_m)
+            ponto= _monocular(obs, origens[i], altura_m, alcance_m)
             if ponto is not None:
                 candidatos.append((ponto, {i}, "monocular"))
     return candidatos
@@ -81,7 +83,9 @@ MIN_IMAGENS_SECUNDARIA= 2
 FRACAO_SECUNDARIA= 0.4
 
 
-def _repartir(gerais: set[str], observacoes: list[Observation]) -> list[tuple[str, list[Observation]]]:
+def _repartir(
+    gerais: set[str], observacoes: list[Observation], exclusivos: bool= False
+) -> list[tuple[str, list[Observation]]]:
     pesos= defaultdict(float)
     imagens= defaultdict(set)
     por_imagem= defaultdict(set)
@@ -96,6 +100,8 @@ def _repartir(gerais: set[str], observacoes: list[Observation]) -> list[tuple[st
         classe= Counter(o.detection.class_name for o in observacoes).most_common(1)[0][0]
         return [(classe, list(observacoes))]
     topo= max(pesos, key=pesos.get)
+    if exclusivos:
+        return [(topo, list(observacoes))]
     minimo= max(MIN_IMAGENS_SECUNDARIA, math.ceil(FRACAO_SECUNDARIA * len(imagens[topo])))
     validas= {topo}
     for classe in pesos:
@@ -170,7 +176,7 @@ def _consenso(grupos, observacoes, origens, config):
     for i, obs in enumerate(observacoes):
         if i in usadas:
             continue
-        ponto= _monocular(obs, origens[i], config.altura_m)
+        ponto= _monocular(obs, origens[i], config.altura_m, config.alcance_max_m)
         if ponto is not None:
             soltas.append((ponto, {i}, "monocular"))
     if soltas:
@@ -206,6 +212,65 @@ def _posicao(membros, observacoes, origens) -> tuple[float, float]:
     return media if ponto is None else ponto
 
 
+FONTE_VIDEO= "video"
+MIN_CAIXAS_TRILHO= 2
+ABERTURA_MIN_GRAUS= 10.0
+
+
+def _abertura(rumos: list[float]) -> float:
+    relativos= [(r - rumos[0] + 180) % 360 - 180 for r in rumos]
+    return max(relativos) - min(relativos)
+
+
+def _grupos_por_trilhos(observacoes, origens, config, frames):
+    grupos= []
+    dentro= set()
+    for indices in trilhos(observacoes, frames):
+        if len(indices) < MIN_CAIXAS_TRILHO:
+            continue
+        monoculares= {i: _monocular(observacoes[i], origens[i], config.altura_m, config.alcance_max_m) for i in indices}
+        perto= [i for i, ponto in monoculares.items() if ponto is not None]
+        if not perto:
+            continue
+        rumos= [observacoes[i].bearing for i in perto]
+        ponto= None
+        if len(perto) >= 2 and _abertura(rumos) >= ABERTURA_MIN_GRAUS:
+            ponto= ponto_minimos_quadrados([origens[i] for i in perto], rumos)
+            if ponto is not None and min(math.dist(ponto, origens[i]) for i in perto) > config.alcance_max_m:
+                ponto= None
+        metodo= "triangulacao"
+        if ponto is None:
+            ponto= tuple(np.mean([monoculares[i] for i in perto], axis=0))
+            metodo= "monocular"
+        dentro.update(perto)
+        grupos.append([(ponto, set(indices), metodo)])
+    fundidos= fundir_proximos(grupos, observacoes, config.raio_dedup_m)
+    return [[(ponto, indices & dentro, metodo) for ponto, indices, metodo in grupo] for grupo in fundidos]
+
+
+def _elementos(categoria, grupos_c, observacoes, origens, config, para_graus) -> list[Element]:
+    elementos= []
+    for membros in grupos_c:
+        indices= sorted(set().union(*(m[1] for m in membros)))
+        x, y= _posicao(membros, observacoes, origens)
+        lon, lat= para_graus.transform(x, y)
+        triangulado= any(m[2] == "triangulacao" for m in membros)
+        incluidas= [observacoes[i] for i in indices]
+        for classe, da_classe in _repartir(set(config.gerais), incluidas, config.tipos_exclusivos):
+            elementos.append(
+                Element(
+                    category=categoria,
+                    class_name=classe,
+                    lon=lon,
+                    lat=lat,
+                    obstruido=all(o.detection.obstruido for o in da_classe),
+                    metodo_geo="triangulacao" if triangulado else "monocular",
+                    observations=da_classe,
+                )
+            )
+    return elementos
+
+
 def locate(
     images: list[ImageRecord],
     detections: list[Detection],
@@ -217,6 +282,7 @@ def locate(
     para_graus= Transformer.from_crs(municipio.crs_metrico, "EPSG:4326", always_xy=True)
     grupos= defaultdict(list)
     elementos= []
+    frames= ordem_dos_frames([i for i in images if i.fonte == FONTE_VIDEO and i.localizavel])
     for detecao in detections:
         imagem= por_id[detecao.image_id]
         if imagem.localizavel:
@@ -224,9 +290,16 @@ def locate(
         else:
             elementos.append(_sem_posicao(detecao, imagem))
     for categoria, observacoes in grupos.items():
-        origens= [para_metros.transform(o.image.lon, o.image.lat) for o in observacoes]
         config= classes.categorias[categoria]
-        candidatos= _candidates(observacoes, origens, config.altura_m)
+        if config.seguir_video:
+            de_video= [o for o in observacoes if o.image.fonte == FONTE_VIDEO]
+            if de_video:
+                origens_v= [para_metros.transform(o.image.lon, o.image.lat) for o in de_video]
+                grupos_v= _grupos_por_trilhos(de_video, origens_v, config, frames)
+                elementos.extend(_elementos(categoria, grupos_v, de_video, origens_v, config, para_graus))
+            observacoes= [o for o in observacoes if o.image.fonte != FONTE_VIDEO]
+        origens= [para_metros.transform(o.image.lon, o.image.lat) for o in observacoes]
+        candidatos= _candidates(observacoes, origens, config.altura_m, config.alcance_max_m)
         if not candidatos:
             continue
         pontos= np.array([c[0] for c in candidatos])
@@ -235,28 +308,15 @@ def locate(
             [c for c, r in zip(candidatos, rotulos) if r == rotulo] for rotulo in sorted(set(rotulos.tolist()))
         ]
         grupos_c= _consenso(grupos_c, observacoes, origens, config)
+        monocular= partial(_monocular, alcance_m=config.alcance_max_m)
+        compativeis= set(config.classes if config.tipos_exclusivos else config.gerais)
         grupos_c= [
             separado
             for membros in grupos_c
-            for separado in separar_mesma_imagem(membros, observacoes, origens, set(config.gerais), _monocular, config.altura_m)
+            for separado in separar_mesma_imagem(
+                membros, observacoes, origens, compativeis, monocular, config.altura_m, config.alcance_max_m
+            )
         ]
         grupos_c= fundir_proximos(grupos_c, observacoes, config.raio_dedup_m)
-        for membros in grupos_c:
-            indices= sorted(set().union(*(m[1] for m in membros)))
-            x, y= _posicao(membros, observacoes, origens)
-            lon, lat= para_graus.transform(x, y)
-            triangulado= any(m[2] == "triangulacao" for m in membros)
-            incluidas= [observacoes[i] for i in indices]
-            for classe, da_classe in _repartir(set(config.gerais), incluidas):
-                elementos.append(
-                    Element(
-                        category=categoria,
-                        class_name=classe,
-                        lon=lon,
-                        lat=lat,
-                        obstruido=all(o.detection.obstruido for o in da_classe),
-                        metodo_geo="triangulacao" if triangulado else "monocular",
-                        observations=da_classe,
-                    )
-                )
+        elementos.extend(_elementos(categoria, grupos_c, observacoes, origens, config, para_graus))
     return elementos
