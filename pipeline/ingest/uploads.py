@@ -266,27 +266,34 @@ def carregar(pasta: Path, prefixo: str, parametros: dict) -> tuple[list[ImageRec
     fps= float(parametros.get("fps") or FPS_PADRAO)
     deslocamento= float(parametros.get("offset_s") or 0.0)
     for video, gpx in emparelhar(por_tipo["video"], por_tipo["gpx"]).items():
+        trilho= None
         if gpx is None:
-            avisos.append(f"{nome_original(video)}: vídeo sem GPX, não pode ser localizado")
-            continue
+            avisos.append(
+                f"{nome_original(video)}: vídeo sem GPX. "
+                "Os frames foram analisados, mas os elementos ficam sem posição no mapa."
+            )
+        else:
+            try:
+                trilho= Trilho(ler_gpx(gpx))
+            except ErroPipeline as erro:
+                avisos.append(f"{erro}. Os frames do vídeo foram analisados, mas os elementos ficam sem posição.")
         try:
-            trilho= Trilho(ler_gpx(gpx))
             frames= extrair_frames(video, fps, pasta / "frames")
         except ErroPipeline as erro:
             avisos.append(str(erro))
             continue
-        avisos.append(
-            f"{nome_original(video)}: o início do vídeo foi assumido igual ao início do GPX ({deslocamento:+g} s)"
-        )
-        usados= 0
+        if trilho is not None:
+            avisos.append(
+                f"{nome_original(video)}: o início do vídeo foi assumido igual ao início do GPX ({deslocamento:+g} s)"
+            )
+        localizados= 0
         for segundos, ficheiro in frames:
-            instante= trilho.inicio + deslocamento + segundos
-            posicao= trilho.posicao(instante)
-            rumo= trilho.rumo(instante)
-            if posicao is None or rumo is None:
-                continue
             n+= 1
-            usados+= 1
+            instante= None if trilho is None else trilho.inicio + deslocamento + segundos
+            posicao= None if trilho is None else trilho.posicao(instante)
+            rumo= None if posicao is None else trilho.rumo(instante)
+            if rumo is not None:
+                localizados+= 1
             registos.append(
                 ImageRecord(
                     fonte="video",
@@ -294,16 +301,24 @@ def carregar(pasta: Path, prefixo: str, parametros: dict) -> tuple[list[ImageRec
                     autor="Utilizador",
                     licenca="Dados do utilizador",
                     url_origem="",
-                    capturada_em=datetime.fromtimestamp(instante, UTC),
-                    lon=posicao[1],
-                    lat=posicao[0],
+                    capturada_em=None if instante is None else datetime.fromtimestamp(instante, UTC),
+                    lon=None if posicao is None else posicao[1],
+                    lat=None if posicao is None else posicao[0],
                     heading=rumo,
                     camera_type="perspective",
                     url_imagem=str(ficheiro),
                 )
             )
-        if usados == 0:
-            avisos.append(f"{nome_original(video)}: nenhum frame coincide com o trilho do GPX (confirme a hora)")
+        if trilho is not None and localizados == 0:
+            avisos.append(
+                f"{nome_original(video)}: nenhum frame coincide com o trilho do GPX (confirme a hora). "
+                "Os frames foram analisados, mas os elementos ficam sem posição."
+            )
+        elif trilho is not None and localizados < len(frames):
+            avisos.append(
+                f"{nome_original(video)}: {len(frames) - localizados} de {len(frames)} frames sem posição ou sem "
+                "direção no trilho do GPX. Foram analisados, mas os elementos desses frames ficam sem posição."
+            )
     return registos, avisos
 
 

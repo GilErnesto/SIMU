@@ -58,7 +58,7 @@ O CPU serve para poucas fotografias. Na GPU o EgoBlur corre em meia precisão co
 Regras dos envios:
 
 - Fotografias: GPS e, de preferência, direção no EXIF (sem direção, deduz-se das vizinhas). **Sem GPS a fotografia é analisada na mesma**: os elementos aparecem na lista com o aviso "GPS indisponível", e o técnico indica a posição ao avaliar.
-- Vídeos: precisam de um GPX gravado ao mesmo tempo, com o mesmo nome ou como único par. O início do vídeo assume-se igual ao do GPX, com desfasamento opcional.
+- Vídeos: de preferência com um GPX gravado ao mesmo tempo, com o mesmo nome ou como único par. O início do vídeo assume-se igual ao do GPX, com desfasamento opcional. **Sem GPX, ou com frames fora do trilho, os frames são analisados na mesma**, com um aviso, e os elementos ficam sem posição. Sem posição não se juntam elementos entre imagens, por isso há duplicados.
 - Os originais ficam em `data/raw/<código>/` (nunca servida pela API) só até a análise acabar bem. Só a versão anonimizada vai para `data/anon/`.
 - A lixeira, na lista de análises, apaga a análise inteira (base de dados e ficheiros).
 
@@ -184,6 +184,6 @@ python -m pipeline.bancada --fonte mapillary --municipio config/avaliacao/rossio
 - Candeeiro ornamental contra poste de luz ainda é fraco (7 de 12 candeeiros certos); papeleiras também (recall de 19%).
 - A distância monocular usa só a altura típica da categoria; o Depth Anything não está integrado.
 - O campo de visão das imagens em perspetiva é fixo (65°, em `pipeline/geolocate/bearing.py`).
-- O vídeo com GPX só foi testado com um vídeo sintético.
+- Elementos sem posição (fotografias sem GPS, vídeos sem GPX) não se juntam entre imagens: aparecem repetidos.
 - O Mapillary limita cada pedido a 2000 imagens: com bbox grande, algumas podem ficar de fora. O KartaView não está implementado.
 - A referência de avaliação é automática (Mapillary), não anotada por pessoas.
