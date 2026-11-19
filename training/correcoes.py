@@ -74,7 +74,7 @@ def exportar_recortes(
         if imagem.camera_type == "spherical":
             ignorados["panorama"]+= len(pares)
             continue
-        pixels= cv2.imread(str(anon_dir / (imagem.caminho_anon or ""))) if imagem.caminho_anon else None
+        pixels= cv2.imread(str(anon_dir / Path(imagem.caminho_anon).name)) if imagem.caminho_anon else None
         if pixels is None:
             ignorados["ficheiro em falta"]+= len(pares)
             continue

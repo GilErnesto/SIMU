@@ -122,6 +122,19 @@ def test_recortes_so_das_classes_revistas_e_dos_negativos(cenario, tmp_path):
 
 
 @precisa_bd
+def test_caminho_absoluto_do_contentor_resolve_se_em_anon_dir(cenario, tmp_path):
+    engine= create_engine(URL_BD)
+    with engine.begin() as ligacao:
+        ligacao.execute(text("UPDATE imagem SET caminho_anon= '/app/data/anon/perspetiva.jpg' WHERE caminho_anon= 'perspetiva.jpg'"))
+    engine.dispose()
+    codigo, saida, _ = correr(cenario, tmp_path)
+    assert codigo == 0
+    assert len(recortes(saida, "candeeiro")) == 1
+    assert len(recortes(saida, "poste_luz")) == 1
+    assert len(recortes(saida, "nao_luz")) == 1
+
+
+@precisa_bd
 def test_referencia_so_com_a_posicao_indicada_pelo_tecnico(cenario, tmp_path):
     codigo, _, referencia= correr(cenario, tmp_path)
     assert codigo == 0
