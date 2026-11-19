@@ -37,6 +37,7 @@ def treinar(config: dict, retomar: bool= False) -> Path:
         workers=config.get("trabalhadores", 4),
         patience=config.get("paciencia", 15),
         time=config.get("tempo"),
+        plots=config.get("graficos", True),
     )
     melhor= pasta / config["nome"] / "weights" / "best.pt"
     destino= Path(config["destino"])

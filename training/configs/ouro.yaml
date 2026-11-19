@@ -1,0 +1,11 @@
+# Fine-tune of the detector on hand-reviewed Aveiro/Rossio images (signs and traffic lights only).
+dados: data/datasets/ouro/data.yaml
+modelo: models/detetor.pt
+epocas: 40
+imgsz: 1024
+lote: 6
+paciencia: 12
+trabalhadores: 4
+nome: ouro
+destino: data/treino/ouro_detetor.pt
+graficos: false  # matplotlib's native modules are blocked by App Control here

@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign review</title>
+<style>
+  :root { --fundo:#14171c; --painel:#1d2229; --texto:#e8ecf1; --suave:#9aa5b1; --borda:#2f3742; --acento:#4da3ff; --ok:#3ecf8e; --mau:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fundo); color:var(--texto); font:14px/1.4 system-ui, sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:10px; align-items:center; padding:8px 14px; background:var(--painel); border-bottom:1px solid var(--borda); flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0 8px 0 0; }
+  button { background:#2a323c; color:var(--texto); border:1px solid var(--borda); border-radius:6px; padding:6px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--acento); }
+  button.primario { background:var(--acento); color:#06121f; border-color:var(--acento); font-weight:600; }
+  button.perigo { border-color:#7a3a3a; color:#ffb3b3; }
+  button.perigo:hover { border-color:var(--mau); }
+  .grupo { display:flex; gap:4px; align-items:center; }
+  #zoomTexto { min-width:48px; text-align:center; color:var(--suave); font-size:12px; }
+  label.opcao { color:var(--suave); display:flex; gap:5px; align-items:center; cursor:pointer; }
+  #progresso { color:var(--suave); }
+  #barra { flex:1; min-width:100px; height:6px; background:#2a323c; border-radius:3px; overflow:hidden; }
+  #barra i { display:block; height:100%; width:0; background:var(--ok); }
+  #estado { min-width:90px; text-align:right; color:var(--suave); }
+  #estado.erro { color:var(--mau); font-weight:600; }
+  main { flex:1; display:flex; min-height:0; }
+  #palco { flex:1; min-width:0; position:relative; overflow:hidden; }
+  canvas#tela { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; background:#000; touch-action:none; }
+  canvas#tela.mao { cursor:grabbing; }
+  aside { width:330px; background:var(--painel); border-left:1px solid var(--borda); padding:12px; overflow:auto; display:flex; flex-direction:column; gap:12px; }
+  aside h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--suave); margin:0 0 6px; }
+  #lupa { width:100%; height:190px; background:#000; border-radius:6px; }
+  #caixas { display:flex; flex-direction:column; gap:3px; }
+  .linha { display:flex; gap:8px; align-items:center; padding:4px 6px; border-radius:5px; cursor:pointer; border:1px solid transparent; }
+  .linha:hover { background:#252c35; }
+  .linha.sel { border-color:#fff; background:#252c35; }
+  .linha.rej .nome { text-decoration:line-through; color:var(--suave); }
+  .ponto { width:10px; height:10px; border-radius:50%; flex:none; }
+  .nome { flex:1; }
+  .conf { color:var(--suave); font-size:12px; }
+  .etq { font-size:11px; padding:1px 5px; border-radius:4px; background:#2a323c; color:var(--suave); }
+  .etq.corrigido { background:#5a4310; color:#ffd27a; }
+  .etq.manual { background:#12405e; color:#8fd0ff; }
+  .etq.removida { background:#4a2323; color:#ffb3b3; }
+  #paleta { display:grid; grid-template-columns:1fr; gap:4px; }
+  #paleta button { text-align:left; display:flex; gap:8px; align-items:center; padding:4px 7px; }
+  #paleta kbd, .ajuda kbd { background:#0f1318; border:1px solid var(--borda); border-radius:4px; padding:0 5px; font-size:11px; color:var(--suave); }
+  #paleta button.atual { border-color:#fff; }
+  .ajuda { color:var(--suave); font-size:12px; line-height:1.9; }
+  .vazio { color:var(--suave); font-style:italic; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sign review</h1>
+  <button id="anterior" title="Left arrow">&larr; Previous</button>
+  <button id="seguinte" class="primario" title="Right arrow or Space">Next &rarr;</button>
+  <button id="porRever" title="N">Next unreviewed</button>
+  <span class="grupo">
+    <button id="zoomMenos" title="Zoom out (-)">&minus;</button>
+    <span id="zoomTexto">100%</span>
+    <button id="zoomMais" title="Zoom in (+ or mouse wheel)">+</button>
+    <button id="zoomAjustar" title="Show the whole image (0)">Fit</button>
+  </span>
+  <button id="remover" class="perigo" title="Delete or X">Remove box</button>
+  <label class="opcao"><input type="checkbox" id="verRemovidas"> <span id="rotuloRemovidas">Show removed</span></label>
+  <span id="progresso"></span>
+  <div id="barra"><i></i></div>
+  <span id="estado"></span>
+</header>
+<main>
+  <div id="palco"><canvas id="tela"></canvas></div>
+  <aside>
+    <section>
+      <h2>Selected box</h2>
+      <canvas id="lupa" width="300" height="190"></canvas>
+    </section>
+    <section>
+      <h2>Boxes in this image</h2>
+      <div id="caixas"></div>
+    </section>
+    <section>
+      <h2>Set the type</h2>
+      <div id="paleta"></div>
+    </section>
+    <section class="ajuda">
+      <h2>Shortcuts</h2>
+      <div><kbd>&rarr;</kbd> or <kbd>Space</kbd> next image (marks the other boxes as correct)</div>
+      <div><kbd>&larr;</kbd> previous &nbsp; <kbd>N</kbd> next unreviewed</div>
+      <div><kbd>Tab</kbd> next box &nbsp; <kbd>Delete</kbd> or <kbd>X</kbd> remove / restore</div>
+      <div><kbd>Wheel</kbd> zoom at the cursor &nbsp; <kbd>+</kbd> <kbd>&minus;</kbd> <kbd>0</kbd> zoom / fit</div>
+      <div><kbd>Z</kbd> zoom to the selected box</div>
+      <div><kbd>Shift</kbd>+drag, or right/middle-drag: move the image</div>
+      <div>Drag on empty space: draw a box the detector missed</div>
+      <div>Click a box: select it</div>
+      <div>Removing a detector box records it as "not a sign". Removing one you drew deletes it.</div>
+    </section>
+  </aside>
+</main>
+<script>
+"use strict";
+const CORES = { sinal: "#ffb020", iluminacao: "#4da3ff", residuos: "#3ecf8e" };
+// English names and a one-line hint for each class id (the server sends Portuguese labels).
+const TIPOS = {
+  stop: ["Stop", "red octagon"],
+  cedencia: ["Give way", "inverted triangle, red border"],
+  limite_velocidade: ["Speed limit", "round, red ring, a number"],
+  proibicao: ["Prohibition", "round, red ring or red disc, no number"],
+  perigo: ["Danger", "triangle, red border, warning symbol"],
+  obrigacao: ["Mandatory", "round, blue, white arrow or symbol"],
+  informacao: ["Information", "blue square or rectangle: parking, crossing, direction"],
+  semaforo: ["Traffic light", "vehicle or pedestrian light"],
+  outro: ["Other sign", "a sign that fits none of the above"],
+};
+const TECLAS = "123456789";
+const ZOOM_MAX = 16;
+let categorias = {}, telas = {}, ordem = [], idx = 0, sel = -1;
+let imagem = null, arrasto = null, paleta = [], mostrarRemovidas = false;
+let zoom = 1, ox = 0, oy = 0, escala = 1;
+const tela = document.getElementById("tela");
+const ctx = tela.getContext("2d");
+const lupa = document.getElementById("lupa");
+const lctx = lupa.getContext("2d");
+const $ = (id) => document.getElementById(id);
+
+function mostrarEstado(texto, erro) {
+  const e = $("estado");
+  e.textContent = texto;
+  e.className = erro ? "erro" : "";
+}
+
+async function guardar(nome) {
+  mostrarEstado("saving…");
+  try {
+    const r = await fetch("/api/tela/" + encodeURIComponent(nome), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(telas[nome]),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    mostrarEstado("saved");
+  } catch (e) {
+    mostrarEstado("ERROR saving: " + e.message, true);
+  }
+}
+
+function atual() { return telas[ordem[idx]]; }
+function rotuloDe(classe) { return TIPOS[classe] ? TIPOS[classe][0] : classe; }
+function rejeitada(c) { return c.estado === "rejeitado"; }
+function visivel(c) { return !rejeitada(c) || mostrarRemovidas; }
+
+function atualizarProgresso() {
+  const feitas = ordem.filter((n) => telas[n].revista).length;
+  $("progresso").textContent = `Image ${idx + 1}/${ordem.length} · ${feitas} reviewed`;
+  $("barra").firstElementChild.style.width = (100 * feitas / ordem.length) + "%";
+}
+
+function atualizarRemovidas() {
+  const n = atual().caixas.filter(rejeitada).length;
+  $("rotuloRemovidas").textContent = `Show removed (${n})`;
+}
+
+function primeiraVisivel() { return atual().caixas.findIndex(visivel); }
+
+function carregarImagem() {
+  const t = atual();
+  zoom = 1;
+  sel = primeiraVisivel();
+  imagem = new Image();
+  imagem.onload = () => { desenhar(); };
+  imagem.src = "/imagem/" + encodeURIComponent(t.imagem);
+  atualizarProgresso();
+  atualizarRemovidas();
+  listar();
+}
+
+// ---- view: zoom and pan -------------------------------------------------------------------
+function ajustarTela() {
+  const palco = $("palco");
+  const w = palco.clientWidth, h = palco.clientHeight;
+  if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; }
+  const t = atual();
+  const base = Math.min(w / t.largura, h / t.altura);
+  escala = base * zoom;
+  limitarVista();
+}
+
+function limitarVista() {
+  const t = atual();
+  const vw = tela.width / escala, vh = tela.height / escala;
+  ox = vw >= t.largura ? (t.largura - vw) / 2 : Math.min(Math.max(ox, 0), t.largura - vw);
+  oy = vh >= t.altura ? (t.altura - vh) / 2 : Math.min(Math.max(oy, 0), t.altura - vh);
+}
+
+function aoEcra(x, y) { return [(x - ox) * escala, (y - oy) * escala]; }
+
+function definirZoom(novo, px, py) {
+  novo = Math.min(Math.max(novo, 1), ZOOM_MAX);
+  if (px === undefined) { px = tela.width / 2; py = tela.height / 2; }
+  const ix = ox + px / escala, iy = oy + py / escala;
+  const base = escala / zoom;
+  zoom = novo;
+  escala = base * zoom;
+  ox = ix - px / escala;
+  oy = iy - py / escala;
+  desenhar();
+}
+
+function ajustarZoom() { zoom = 1; desenhar(); }
+
+function zoomCaixa() {
+  const c = atual().caixas[sel];
+  if (!c) return;
+  const [x1, y1, x2, y2] = c.caixa;
+  const base = escala / zoom;
+  const alvo = Math.min(tela.width / ((x2 - x1) * 4), tela.height / ((y2 - y1) * 4)) / base;
+  zoom = Math.min(Math.max(alvo, 2), ZOOM_MAX);
+  escala = base * zoom;
+  ox = (x1 + x2) / 2 - tela.width / escala / 2;
+  oy = (y1 + y2) / 2 - tela.height / escala / 2;
+  desenhar();
+}
+
+// ---- drawing ------------------------------------------------------------------------------
+function desenhar() {
+  if (!imagem || !imagem.complete) return;
+  ajustarTela();
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, tela.width, tela.height);
+  ctx.save();
+  ctx.imageSmoothingQuality = "high";
+  ctx.scale(escala, escala);
+  ctx.translate(-ox, -oy);
+  ctx.drawImage(imagem, 0, 0);
+  ctx.restore();
+  const t = atual();
+  t.caixas.forEach((c, i) => {
+    if (!visivel(c)) return;
+    const [x1, y1] = aoEcra(c.caixa[0], c.caixa[1]);
+    const [x2, y2] = aoEcra(c.caixa[2], c.caixa[3]);
+    const cor = CORES[c.categoria] || "#fff";
+    ctx.lineWidth = i === sel ? 3 : 2;
+    ctx.strokeStyle = i === sel ? "#ffffff" : cor;
+    ctx.setLineDash(rejeitada(c) ? [5, 4] : []);
+    ctx.globalAlpha = rejeitada(c) ? 0.55 : 1;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.setLineDash([]);
+    const texto = rotuloDe(c.classe) + (c.confianca != null ? " " + c.confianca.toFixed(2) : "");
+    ctx.font = "12px system-ui, sans-serif";
+    const w = ctx.measureText(texto).width + 6;
+    ctx.fillStyle = rejeitada(c) ? "#555" : cor;
+    ctx.fillRect(x1, Math.max(y1 - 15, 0), w, 15);
+    ctx.fillStyle = "#000";
+    ctx.fillText(texto, x1 + 3, Math.max(y1 - 4, 11));
+    ctx.globalAlpha = 1;
+  });
+  if (arrasto && arrasto.modo === "caixa" && arrasto.mexeu) {
+    const [ax, ay] = aoEcra(arrasto.x0, arrasto.y0);
+    const [bx, by] = aoEcra(arrasto.x1, arrasto.y1);
+    ctx.strokeStyle = "#fff"; ctx.setLineDash([4, 3]); ctx.lineWidth = 2;
+    ctx.strokeRect(ax, ay, bx - ax, by - ay);
+    ctx.setLineDash([]);
+  }
+  $("zoomTexto").textContent = Math.round(zoom * 100) + "%";
+  desenharLupa();
+}
+
+function desenharLupa() {
+  lctx.clearRect(0, 0, lupa.width, lupa.height);
+  lctx.fillStyle = "#000"; lctx.fillRect(0, 0, lupa.width, lupa.height);
+  const t = atual();
+  const c = t.caixas[sel];
+  if (!c || !imagem) return;
+  const [x1, y1, x2, y2] = c.caixa;
+  const mx = (x2 - x1) * 0.5 + 8, my = (y2 - y1) * 0.5 + 8;
+  const sx = Math.max(x1 - mx, 0), sy = Math.max(y1 - my, 0);
+  const sw = Math.min(x2 + mx, t.largura) - sx, sh = Math.min(y2 + my, t.altura) - sy;
+  const k = Math.min(lupa.width / sw, lupa.height / sh);
+  const dw = sw * k, dh = sh * k;
+  lctx.imageSmoothingQuality = "high";
+  lctx.drawImage(imagem, sx, sy, sw, sh, (lupa.width - dw) / 2, (lupa.height - dh) / 2, dw, dh);
+  lctx.strokeStyle = "#fff"; lctx.lineWidth = 1;
+  lctx.strokeRect((lupa.width - dw) / 2 + (x1 - sx) * k, (lupa.height - dh) / 2 + (y1 - sy) * k, (x2 - x1) * k, (y2 - y1) * k);
+}
+
+function etiqueta(classe, texto) {
+  const e = document.createElement("span");
+  e.className = "etq " + classe;
+  e.textContent = texto;
+  return e;
+}
+
+function listar() {
+  const t = atual();
+  const box = $("caixas");
+  box.innerHTML = "";
+  const visiveis = t.caixas.filter(visivel).length;
+  if (!visiveis) box.innerHTML = '<div class="vazio">No boxes. If a sign is missing, draw it on the image.</div>';
+  t.caixas.forEach((c, i) => {
+    if (!visivel(c)) return;
+    const l = document.createElement("div");
+    l.className = "linha" + (i === sel ? " sel" : "") + (rejeitada(c) ? " rej" : "");
+    const p = document.createElement("span"); p.className = "ponto"; p.style.background = CORES[c.categoria] || "#fff";
+    const n = document.createElement("span"); n.className = "nome"; n.textContent = rotuloDe(c.classe);
+    l.append(p, n);
+    if (c.confianca != null) { const f = document.createElement("span"); f.className = "conf"; f.textContent = c.confianca.toFixed(2); l.append(f); }
+    if (rejeitada(c)) l.append(etiqueta("removida", "removed"));
+    else if (c.origem === "manual") l.append(etiqueta("manual", "new"));
+    else if (c.estado === "corrigido") l.append(etiqueta("corrigido", "changed"));
+    l.onclick = () => { sel = i; desenhar(); listar(); };
+    box.append(l);
+  });
+  const c = t.caixas[sel];
+  const atualClasse = c ? c.classe : null;
+  document.querySelectorAll("#paleta button").forEach((b) => b.classList.toggle("atual", b.dataset.classe === atualClasse));
+  $("remover").textContent = c && rejeitada(c) ? "Restore box" : "Remove box";
+}
+
+function construirPaleta() {
+  const el = $("paleta");
+  paleta = [];
+  for (const [cat, info] of Object.entries(categorias)) for (const c of info.classes) paleta.push({ cat, id: c.id });
+  paleta.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.dataset.classe = p.id;
+    const k = document.createElement("kbd"); k.textContent = TECLAS[i] || "";
+    const nome = document.createElement("span");
+    const forte = document.createElement("b"); forte.textContent = rotuloDe(p.id); forte.style.fontWeight = "600";
+    nome.append(forte);
+    if (TIPOS[p.id]) {
+      const dica = document.createElement("small");
+      dica.textContent = TIPOS[p.id][1];
+      dica.style.cssText = "display:block;color:#9aa5b1;font-size:11px;line-height:1.2";
+      nome.append(dica);
+      b.title = TIPOS[p.id][1];
+    }
+    b.append(k, nome);
+    b.onclick = () => definirClasse(p);
+    el.append(b);
+  });
+}
+
+// ---- editing ------------------------------------------------------------------------------
+function alterou() {
+  atual().revista = false;
+  atualizarProgresso();
+  atualizarRemovidas();
+  desenhar(); listar(); guardar(ordem[idx]);
+}
+
+function definirClasse(p) {
+  const c = atual().caixas[sel];
+  if (!c) return;
+  c.categoria = p.cat; c.classe = p.id;
+  c.estado = c.origem === "manual" || p.id === c.classe_modelo ? "aceite" : "corrigido";
+  alterou();
+}
+
+function remover() {
+  const t = atual(), c = t.caixas[sel];
+  if (!c) return;
+  if (rejeitada(c)) {
+    c.estado = c.origem === "manual" || c.classe !== c.classe_modelo ? "corrigido" : "aceite";
+  } else if (c.origem === "manual") {
+    t.caixas.splice(sel, 1);
+    sel = primeiraVisivel();
+  } else {
+    c.estado = "rejeitado";
+    if (!mostrarRemovidas) {
+      const seguinte = t.caixas.findIndex((x, i) => i > sel && visivel(x));
+      sel = seguinte >= 0 ? seguinte : primeiraVisivel();
+    }
+  }
+  alterou();
+}
+
+function concluirTela() {
+  const t = atual();
+  t.caixas.forEach((c) => { if (c.estado === "por_rever") c.estado = "aceite"; });
+  t.revista = true;
+  guardar(ordem[idx]);
+}
+
+function ir(novo) {
+  if (novo < 0 || novo >= ordem.length) return;
+  idx = novo;
+  carregarImagem();
+}
+
+function seguinte() {
+  concluirTela();
+  if (idx < ordem.length - 1) ir(idx + 1); else { atualizarProgresso(); mostrarEstado("last image"); }
+}
+
+function proximaPorRever() {
+  for (let k = 1; k <= ordem.length; k++) {
+    const j = (idx + k) % ordem.length;
+    if (!telas[ordem[j]].revista) { ir(j); return; }
+  }
+  mostrarEstado("all reviewed");
+}
+
+// ---- mouse --------------------------------------------------------------------------------
+function posicaoEcra(e) {
+  const r = tela.getBoundingClientRect();
+  return [(e.clientX - r.left) * tela.width / r.width, (e.clientY - r.top) * tela.height / r.height];
+}
+function posicaoImagem(e) {
+  const [px, py] = posicaoEcra(e);
+  return [ox + px / escala, oy + py / escala];
+}
+
+tela.addEventListener("contextmenu", (e) => e.preventDefault());
+tela.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const [px, py] = posicaoEcra(e);
+  definirZoom(zoom * (e.deltaY < 0 ? 1.25 : 1 / 1.25), px, py);
+}, { passive: false });
+
+tela.addEventListener("mousedown", (e) => {
+  const [px, py] = posicaoEcra(e);
+  if (e.button === 1 || e.button === 2 || e.shiftKey) {
+    e.preventDefault();
+    arrasto = { modo: "mao", px0: px, py0: py, ox0: ox, oy0: oy };
+    tela.classList.add("mao");
+    return;
+  }
+  const [x, y] = posicaoImagem(e);
+  let melhor = -1, area = Infinity;
+  atual().caixas.forEach((c, i) => {
+    if (!visivel(c)) return;
+    const [x1, y1, x2, y2] = c.caixa;
+    if (x >= x1 && x <= x2 && y >= y1 && y <= y2 && (x2 - x1) * (y2 - y1) < area) { melhor = i; area = (x2 - x1) * (y2 - y1); }
+  });
+  arrasto = { modo: "caixa", x0: x, y0: y, x1: x, y1: y, px0: px, py0: py, mexeu: false, alvo: melhor };
+});
+
+window.addEventListener("mousemove", (e) => {
+  if (!arrasto) return;
+  const [px, py] = posicaoEcra(e);
+  if (arrasto.modo === "mao") {
+    ox = arrasto.ox0 - (px - arrasto.px0) / escala;
+    oy = arrasto.oy0 - (py - arrasto.py0) / escala;
+    desenhar();
+    return;
+  }
+  const t = atual();
+  const [x, y] = posicaoImagem(e);
+  arrasto.x1 = Math.min(Math.max(x, 0), t.largura);
+  arrasto.y1 = Math.min(Math.max(y, 0), t.altura);
+  if (Math.hypot(px - arrasto.px0, py - arrasto.py0) > 8) arrasto.mexeu = true;
+  if (arrasto.mexeu) desenhar();
+});
+
+window.addEventListener("mouseup", () => {
+  if (!arrasto) return;
+  const a = arrasto; arrasto = null;
+  tela.classList.remove("mao");
+  if (a.modo === "mao") return;
+  if (a.mexeu) {
+    const x1 = Math.min(a.x0, a.x1), x2 = Math.max(a.x0, a.x1);
+    const y1 = Math.min(a.y0, a.y1), y2 = Math.max(a.y0, a.y1);
+    if (x2 - x1 < 3 || y2 - y1 < 3) { desenhar(); return; }
+    const t = atual();
+    t.caixas.push({ caixa: [x1, y1, x2, y2], categoria: "sinal", classe: "outro", classe_modelo: null, confianca: null, origem: "manual", estado: "aceite" });
+    sel = t.caixas.length - 1;
+    alterou();
+    return;
+  }
+  if (a.alvo >= 0) sel = a.alvo;
+  desenhar(); listar();
+});
+
+// ---- keyboard and buttons -----------------------------------------------------------------
+window.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (k === "ArrowRight" || k === " " || k === "Enter") { e.preventDefault(); seguinte(); }
+  else if (k === "ArrowLeft") { e.preventDefault(); ir(idx - 1); }
+  else if (k === "n" || k === "N") proximaPorRever();
+  else if (k === "x" || k === "X" || k === "Delete" || k === "Backspace") { e.preventDefault(); remover(); }
+  else if (k === "+" || k === "=") definirZoom(zoom * 1.5);
+  else if (k === "-" || k === "_") definirZoom(zoom / 1.5);
+  else if (k === "0") ajustarZoom();
+  else if (k === "z" || k === "Z") zoomCaixa();
+  else if (k === "Tab") {
+    e.preventDefault();
+    const t = atual();
+    const n = t.caixas.length;
+    for (let passo = 1; passo <= n; passo++) {
+      const j = (sel + (e.shiftKey ? -passo : passo) + n * 2) % n;
+      if (visivel(t.caixas[j])) { sel = j; break; }
+    }
+    desenhar(); listar();
+  } else {
+    const i = TECLAS.indexOf(k);
+    if (i >= 0 && paleta[i]) definirClasse(paleta[i]);
+  }
+});
+window.addEventListener("resize", desenhar);
+$("anterior").onclick = () => ir(idx - 1);
+$("seguinte").onclick = seguinte;
+$("porRever").onclick = proximaPorRever;
+$("remover").onclick = remover;
+$("zoomMais").onclick = () => definirZoom(zoom * 1.5);
+$("zoomMenos").onclick = () => definirZoom(zoom / 1.5);
+$("zoomAjustar").onclick = ajustarZoom;
+$("verRemovidas").onchange = (e) => {
+  mostrarRemovidas = e.target.checked;
+  if (!visivel(atual().caixas[sel] || { estado: "aceite" })) sel = primeiraVisivel();
+  desenhar(); listar();
+};
+
+(async function iniciar() {
+  try {
+    const r = await fetch("/api/estado");
+    const d = await r.json();
+    categorias = d.categorias; telas = d.telas;
+    ordem = Object.keys(telas).sort();
+    if (!ordem.length) { mostrarEstado("no images", true); return; }
+    construirPaleta();
+    const primeira = ordem.findIndex((n) => !telas[n].revista);
+    idx = primeira >= 0 ? primeira : 0;
+    carregarImagem();
+  } catch (e) {
+    mostrarEstado("Could not reach the server: " + e.message, true);
+  }
+})();
+</script>
+</body>
+</html>
