@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   corrigirElemento,
   juntarElementos,
-  ligacaoExportacao,
   listarDuplicados,
   listarElementos,
   obterAnalise,
@@ -11,13 +10,16 @@ import {
   obterElemento,
   separarElemento,
 } from "./api.js";
+import Ampliar from "./Ampliar.jsx";
 import Avaliar from "./Avaliar.jsx";
+import ChipAvisos from "./ChipAvisos.jsx";
 import Divisor from "./Divisor.jsx";
 import Duplicados from "./Duplicados.jsx";
-import Filtros, { FILTROS_VAZIOS, contarFiltros } from "./Filtros.jsx";
+import { FILTROS_VAZIOS, contarFiltros } from "./Filtros.jsx";
 import Fotos from "./Fotos.jsx";
-import ListaElementos from "./ListaElementos.jsx";
+import Lateral from "./Lateral.jsx";
 import Mapa from "./Mapa.jsx";
+import MenuExportar from "./MenuExportar.jsx";
 import ProgressoDaAnalise from "./ProgressoDaAnalise.jsx";
 import { Ligacao } from "./rota.js";
 import { ESTADOS_ANALISE, analiseEmCurso, lerNumero } from "./rotulos.js";
@@ -95,7 +97,10 @@ export default function PaginaAnalise({ token }) {
   const [foco, setFoco]= useState(null);
   const [detalhe, setDetalhe]= useState({ estado: "a-carregar" });
   const [aba, setAba]= useState("mapa");
-  const [fotosPct, setFotosPct]= useState(() => Number(ler("simu.fotos", "50")) || 50);
+  const [fotosPct, setFotosPct]= useState(() => Number(ler("simu.fotos", "38")) || 38);
+  const [lateralRetraida, setLateralRetraida]= useState(() => ler("simu.lateral", "0") === "1");
+  const [lateralManual, setLateralManual]= useState(null);
+  const [ampliar, setAmpliar]= useState(null);
   const [filtrosAbertos, setFiltrosAbertos]= useState(false);
   const [avaliar, setAvaliar]= useState(false);
   const [tecnico, setTecnico]= useState(() => ler("tecnico", ""));
@@ -118,6 +123,8 @@ export default function PaginaAnalise({ token }) {
   const gatilho= useRef(null);
   const analise= pedido.fase === "ok" ? pedido.dados : null;
   const concluida= analise?.estado === "concluida";
+  const avaliarAberto= avaliar && detalhe.estado === "ok";
+  const lateralFechada= avaliarAberto ? (lateralManual ?? true) : lateralRetraida;
 
   useEffect(() => {
     let parado= false;
@@ -249,19 +256,27 @@ export default function PaginaAnalise({ token }) {
   }, []);
 
   useEffect(() => {
+    setLateralManual(null);
+  }, [avaliarAberto]);
+
+  useEffect(() => {
+    setAmpliar(null);
+  }, [selecionadoId]);
+
+  useEffect(() => {
     function aoPremir(evento) {
       if (evento.key !== "Escape") return;
+      if (document.querySelector("dialog[open]")) return;
       if (duplicadosAbertos) {
         setDuplicadosAbertos(false);
         return;
       }
-      if (filtrosAbertos) setFiltrosAbertos(false);
-      else if (avaliar) fecharAvaliar();
+      if (avaliar) fecharAvaliar();
       else if (selecionadoId !== null) desselecionar();
     }
     window.addEventListener("keydown", aoPremir);
     return () => window.removeEventListener("keydown", aoPremir);
-  }, [duplicadosAbertos, filtrosAbertos, avaliar, selecionadoId, fecharAvaliar, desselecionar]);
+  }, [duplicadosAbertos, avaliar, selecionadoId, fecharAvaliar, desselecionar]);
 
   const selecionar= useCallback(
     (id, origem) => {
@@ -285,6 +300,25 @@ export default function PaginaAnalise({ token }) {
   function abrirAvaliar() {
     gatilho.current= document.activeElement;
     setAvaliar(true);
+  }
+
+  function alternarLateral() {
+    if (avaliarAberto) {
+      setLateralManual(!lateralFechada);
+      return;
+    }
+    const novo= !lateralRetraida;
+    setLateralRetraida(novo);
+    guardar("simu.lateral", novo ? "1" : "0");
+  }
+
+  function alternarFiltros(abrir) {
+    if (abrir === true) {
+      if (lateralFechada) alternarLateral();
+      setFiltrosAbertos(true);
+    } else {
+      setFiltrosAbertos((aberto) => !aberto);
+    }
   }
 
   async function guardarCorrecao(corpo) {
@@ -352,30 +386,8 @@ export default function PaginaAnalise({ token }) {
       )}
       {concluida && config.fase === "ok" && (
         <div className="cabecalho__acoes">
-          <button
-            type="button"
-            className="botao"
-            aria-haspopup="dialog"
-            disabled={!concluida}
-            onClick={() => setDuplicadosAbertos(true)}
-          >
-            Duplicados ({paresVisiveis.length})
-          </button>
-          <button
-            type="button"
-            className="botao"
-            aria-expanded={filtrosAbertos}
-            aria-controls="painel-filtros"
-            onClick={() => setFiltrosAbertos((aberto) => !aberto)}
-          >
-            Filtros{contarFiltros(filtros) > 0 ? ` (${contarFiltros(filtros)})` : ""}
-          </button>
-          <a className="botao botao--secundario" href={ligacaoExportacao("geojson", { ...filtros, analise: token })} download>
-            Exportar GeoJSON
-          </a>
-          <a className="botao botao--secundario" href={ligacaoExportacao("csv", { ...filtros, analise: token })} download>
-            Exportar CSV
-          </a>
+          <ChipAvisos avisos={analise.avisos} />
+          <MenuExportar token={token} filtros={filtros} mostrados={lista.features.length} />
         </div>
       )}
     </header>
@@ -446,30 +458,11 @@ export default function PaginaAnalise({ token }) {
     : "Sem elementos para mostrar.";
 
   return (
-    <div className="analise" style={{ "--fotos": `${fotosPct}%` }}>
-      <a className="saltar" href="#lista">
+    <div className="analise" data-lateral={lateralFechada ? "fechada" : "aberta"} style={{ "--fotos": `${fotosPct}%` }}>
+      <a className="saltar" href="#lateral">
         Saltar para a lista
       </a>
       {cabecalho}
-      {filtrosAbertos && (
-        <Filtros
-          config={dadosConfig}
-          filtros={filtros}
-          mostrados={lista.features.length}
-          total={analise.n_elementos}
-          aoMudar={mudarFiltros}
-          aoLimpar={() => setFiltros(FILTROS_VAZIOS)}
-          aoFechar={() => setFiltrosAbertos(false)}
-        />
-      )}
-      {analise.avisos.length > 0 && (
-        <details className="faixa-avisos" open={analise.avisos.some((aviso) => aviso.includes("GPS indisponível"))}>
-          <summary>
-            {analise.avisos.length} {analise.avisos.length === 1 ? "aviso" : "avisos"} desta análise
-          </summary>
-          <Avisos avisos={analise.avisos} />
-        </details>
-      )}
 
       <nav className="separadores" aria-label="Vista">
         {[
@@ -492,18 +485,26 @@ export default function PaginaAnalise({ token }) {
         </div>
       )}
 
-      <main className="corpo" data-aba={aba} data-avaliar={avaliar && detalhe.estado === "ok"}>
-        <ListaElementos
+      <main className="corpo" data-aba={aba} data-avaliar={avaliarAberto} data-lateral={lateralFechada ? "fechada" : "aberta"}>
+        <Lateral
           config={dadosConfig}
           lista={lista}
           selecionadoId={selecionadoId}
-          temFiltros={contarFiltros(filtros) > 0}
+          filtros={filtros}
+          filtrosAbertos={filtrosAbertos}
+          totalAnalise={analise.n_elementos}
+          pares={paresVisiveis.length}
+          fechada={lateralFechada}
           vazia={vazia}
+          aoAlternar={alternarLateral}
+          aoAlternarFiltros={alternarFiltros}
+          aoMudarFiltros={mudarFiltros}
+          aoLimparFiltros={() => setFiltros(FILTROS_VAZIOS)}
+          aoAbrirDuplicados={() => setDuplicadosAbertos(true)}
           aoSelecionar={selecionar}
           aoRepetir={() => setTentativaLista((n) => n + 1)}
-          aoLimpar={() => setFiltros(FILTROS_VAZIOS)}
         />
-        <section className="centro" aria-label="Mapa e fotografias">
+        <section className="centro" aria-label="Mapa e detalhe do elemento">
           <div className="paineis">
             <section className={modoMover ? "painel-mapa mapa mapa--escolher" : "painel-mapa mapa"} aria-label="Mapa">
               <Mapa
@@ -511,7 +512,7 @@ export default function PaginaAnalise({ token }) {
                 features={lista.features}
                 selecionadoId={selecionadoId}
                 foco={foco}
-                vista={`${fotosPct}-${aba}`}
+                vista={`${fotosPct}-${aba}-${lateralFechada}`}
                 modoMover={modoMover}
                 candidata={candidataNumeros}
                 aoSelecionar={selecionar}
@@ -520,34 +521,52 @@ export default function PaginaAnalise({ token }) {
               />
             </section>
             <Divisor valor={fotosPct} aoMudar={mudarDivisao} />
-            <Fotos
-              config={dadosConfig}
-              selecionadoId={selecionadoId}
-              detalhe={detalhe}
-              aoAvaliar={abrirAvaliar}
-              aoRepetir={() => setTentativaDetalhe((n) => n + 1)}
-              tecnico={tecnico}
-              aoMudarTecnico={mudarTecnico}
-              aoSeparar={separar}
-            />
+            <section className="painel-direito" data-modo={avaliarAberto ? "avaliar" : "fotos"} aria-label="Detalhe do elemento">
+              <div className="abas" role="group" aria-label="Painel do elemento">
+                <button type="button" className="aba" aria-pressed={!avaliarAberto} onClick={fecharAvaliar}>
+                  Fotografias
+                </button>
+                <button
+                  type="button"
+                  className="aba"
+                  aria-pressed={avaliarAberto}
+                  disabled={selecionadoId === null}
+                  onClick={abrirAvaliar}
+                >
+                  Avaliar
+                </button>
+              </div>
+              {avaliarAberto ? (
+                <Avaliar
+                  config={dadosConfig}
+                  dados={detalhe.dados}
+                  tecnico={tecnico}
+                  modoMover={modoMover}
+                  candidata={candidata}
+                  aoMudarTecnico={mudarTecnico}
+                  aoGuardar={guardarCorrecao}
+                  aoFechar={fecharAvaliar}
+                  aoAlternarMover={() => setModoMover((ativo) => !ativo)}
+                  aoMudarCandidata={setCandidata}
+                  vizinhos={vizinhos}
+                  aoJuntar={(origem, autor) => juntar(selecionadoId, origem, autor)}
+                  aoAmpliar={(indice) => setAmpliar({ indice })}
+                />
+              ) : (
+                <Fotos
+                  config={dadosConfig}
+                  selecionadoId={selecionadoId}
+                  detalhe={detalhe}
+                  aoRepetir={() => setTentativaDetalhe((n) => n + 1)}
+                  tecnico={tecnico}
+                  aoMudarTecnico={mudarTecnico}
+                  aoSeparar={separar}
+                  aoAmpliar={(indice) => setAmpliar({ indice })}
+                />
+              )}
+            </section>
           </div>
         </section>
-        {avaliar && detalhe.estado === "ok" && (
-          <Avaliar
-            config={dadosConfig}
-            dados={detalhe.dados}
-            tecnico={tecnico}
-            modoMover={modoMover}
-            candidata={candidata}
-            aoMudarTecnico={mudarTecnico}
-            aoGuardar={guardarCorrecao}
-            aoFechar={fecharAvaliar}
-            aoAlternarMover={() => setModoMover((ativo) => !ativo)}
-            aoMudarCandidata={setCandidata}
-            vizinhos={vizinhos}
-            aoJuntar={(origem, autor) => juntar(selecionadoId, origem, autor)}
-          />
-        )}
       </main>
       {duplicadosAbertos && (
         <Duplicados
@@ -562,6 +581,14 @@ export default function PaginaAnalise({ token }) {
           aoVerNoMapa={verNoMapa}
           aoRepetir={() => setTentativaDuplicados((n) => n + 1)}
           aoFechar={() => setDuplicadosAbertos(false)}
+        />
+      )}
+      {ampliar && detalhe.estado === "ok" && (
+        <Ampliar
+          observacoes={detalhe.dados.properties.observacoes}
+          indice={ampliar.indice}
+          aoMudar={(indice) => setAmpliar({ indice })}
+          aoFechar={() => setAmpliar(null)}
         />
       )}
     </div>

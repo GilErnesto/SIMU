@@ -19,11 +19,7 @@ export default function Inicio() {
         </Ligacao>
       </header>
       <main className="inicio">
-        <h1 className="inicio__titulo">Identificação automática do mobiliário urbano</h1>
-        <p className="inicio__texto">
-          Largue fotografias, vídeos e o GPX do percurso. A análise corre em segundo plano e pode continuar a usar o
-          SIMU enquanto espera.
-        </p>
+        <h1 className="inicio__titulo">Sistema de Identificação de Mobiliário Urbano</h1>
         <ZonaDeEnvio aoEnviar={() => setVersao((n) => n + 1)} />
         <ListaAnalises versao={versao} />
       </main>

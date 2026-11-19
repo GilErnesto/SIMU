@@ -6,7 +6,7 @@ function metros(valor) {
   return `${valor.toFixed(1).replace(".", ",")} m`;
 }
 
-export default function Juntar({ config, vizinhos, desativado, aoJuntar }) {
+export default function Juntar({ config, vizinhos, desativado, aoJuntar, semTitulo= false }) {
   const [escolhido, setEscolhido]= useState("");
   const [aConfirmar, setAConfirmar]= useState(false);
   const alvo= vizinhos.find((vizinho) => String(vizinho.id) === escolhido) ?? null;
@@ -23,10 +23,12 @@ export default function Juntar({ config, vizinhos, desativado, aoJuntar }) {
   }
 
   return (
-    <section className="bloco" aria-labelledby="titulo-juntar">
-      <h3 id="titulo-juntar" className="bloco__titulo">
-        Juntar com outro elemento
-      </h3>
+    <section className="bloco" aria-label="Juntar com outro elemento">
+      {!semTitulo && (
+        <h3 id="titulo-juntar" className="bloco__titulo">
+          Juntar com outro elemento
+        </h3>
+      )}
       {vizinhos.length === 0 ? (
         <p className="nota">Não há outros elementos da mesma categoria a menos de 15 metros.</p>
       ) : (
