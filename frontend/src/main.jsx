@@ -3,6 +3,7 @@ import "leaflet/dist/leaflet.css";
 import "./styles.css";
 import "./layout.css";
 import "./reportes.css";
+import "./tema.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

@@ -1,3 +1,4 @@
+import { Map as MapIcone, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { guardar, ler } from "./armazenamento.js";
@@ -55,34 +56,40 @@ export default function Inicio() {
         <Marca />
         <NavegacaoTecnico />
       </header>
-      <div className="faixa-tecnico">
-        <label htmlFor="tecnico-inicio">Técnico</label>
-        <input
-          id="tecnico-inicio"
-          autoComplete="name"
-          maxLength={128}
-          value={tecnico}
-          onChange={(evento) => mudarTecnico(evento.target.value)}
-        />
-        <button
-          ref={botaoZona}
-          type="button"
-          className="botao faixa-tecnico__zona"
-          aria-haspopup="dialog"
-          onClick={abrirZona}
-        >
-          Escolher zona no mapa
-        </button>
-      </div>
       <main className="inicio">
-        <h1 className="inicio__titulo">Sistema de Identificação de Mobiliário Urbano</h1>
-        <ZonaDeEnvio aoEnviar={atualizar} aoComecar={() => setZonaEnviada(false)} />
+        <div className="inicio__topo">
+          <div>
+            <h1 className="inicio__titulo">Sistema de Identificação de Mobiliário Urbano</h1>
+            <p className="inicio__sub">Envie fotografias ou vídeos, ou escolha uma zona do Mapillary, para encontrar sinais, candeeiros e contentores.</p>
+          </div>
+          <div className="tecnico__ferramentas">
+            <label className="campo-icone">
+              <User aria-hidden="true" size={18} />
+              <span className="visualmente-escondido">Técnico</span>
+              <input
+                id="tecnico-inicio"
+                autoComplete="name"
+                maxLength={128}
+                placeholder="O seu nome (técnico)"
+                value={tecnico}
+                onChange={(evento) => mudarTecnico(evento.target.value)}
+              />
+            </label>
+            <button ref={botaoZona} type="button" className="botao-g botao-g--secundario" aria-haspopup="dialog" onClick={abrirZona}>
+              <MapIcone aria-hidden="true" size={18} />
+              Escolher zona no mapa
+            </button>
+          </div>
+        </div>
         {zonaEnviada && (
           <p className="mensagem mensagem--ok" role="status">
-            Zona enviada. O estado aparece na lista abaixo.
+            Zona enviada. O estado aparece na lista de análises.
           </p>
         )}
-        <ListaAnalises versao={versao} />
+        <div className="inicio__grelha">
+          <ZonaDeEnvio aoEnviar={atualizar} aoComecar={() => setZonaEnviada(false)} />
+          <ListaAnalises versao={versao} />
+        </div>
       </main>
       {zonaAberta && <ZonaNoMapa aoFechar={fecharZona} aoEnviar={zonaCriada} />}
     </div>

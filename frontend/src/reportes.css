@@ -1625,12 +1625,6 @@
     var(--sal);
 }
 
-@media (min-width: 1024px) {
-  /* On a computer the citizen pages read at a comfortable size, not phone-sized. */
-  .pagina--cidadao {
-    font-size: 1.0625rem;
-  }
-}
 
 .cabecalho-cidadao {
   position: sticky;

@@ -1,0 +1,409 @@
+/*
+ * One look for every page (citizen, home, analysis map, problems), loaded last.
+ * 1. Scale: the root font grows with the screen (16 px on a laptop, ~20 px on a 1920 px monitor), and the
+ *    controls below are sized in rem so they grow with it instead of staying phone-sized.
+ * 2. Shared components: buttons, fields, tabs, list rows, cards and status badges look the same everywhere.
+ */
+
+/* ---------- 1. Scale ---------- */
+
+@media (min-width: 1024px) {
+  html {
+    font-size: clamp(1rem, 0.55rem + 0.6vw, 1.25rem);
+  }
+}
+
+/* ---------- 2. Shared components ---------- */
+
+/* Buttons: the old .botao follows .botao-g (rounded, taller, bolder). */
+.botao,
+.botao-g {
+  min-height: 2.75rem;
+  border-radius: 0.75rem;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+}
+
+.botao {
+  padding: 0 1.125rem;
+  border-color: var(--linha);
+}
+
+.botao:hover:not(:disabled) {
+  border-color: var(--controlo);
+}
+
+.botao--principal {
+  border-color: var(--acento);
+  box-shadow: 0 2px 6px rgba(11, 107, 115, 0.25);
+}
+
+.botao--principal:hover:not(:disabled) {
+  border-color: var(--acento-escuro);
+}
+
+.botao--secundario {
+  border-color: transparent;
+}
+
+.botao--icone {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border-radius: 0.75rem;
+}
+
+.botao-g {
+  padding: 0 1.25rem;
+}
+
+.botao-g--compacto {
+  min-height: 2.75rem;
+}
+
+.botao:focus-visible,
+.aba:focus-visible,
+.item:focus-visible,
+.lateral__duplicados:focus-visible,
+.lateral__problemas:focus-visible {
+  outline: 3px solid var(--acento);
+  outline-offset: 2px;
+}
+
+/* Fields */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+select {
+  min-height: 2.75rem;
+  border-color: var(--linha);
+  border-radius: 0.625rem;
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+select:focus {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px rgba(11, 107, 115, 0.18);
+}
+
+.campo-icone input {
+  min-height: 3rem;
+  padding-left: 2.5rem;
+}
+
+/* Status badges: one pill style (analysis state, report state). */
+.estado {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1875rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+/* Header: same height and spacing on every technician page. */
+.cabecalho {
+  min-height: 4.75rem;
+  padding: 0.625rem clamp(1rem, 2vw, 2rem);
+}
+
+.cabecalho .marca__logo {
+  height: 3rem;
+}
+
+.nav-tecnico__ligacao {
+  min-height: 2.5rem;
+}
+
+/* Tabs in the element panel: the same pill segments as the technician navigation. */
+.abas {
+  gap: 0.25rem;
+  margin: 0.75rem 1rem;
+  padding: 0.25rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--relevo);
+}
+
+.aba {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 0.5625rem;
+}
+
+.aba:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.aba[aria-pressed="true"] {
+  background: var(--painel);
+  color: var(--tinta);
+  box-shadow: 0 1px 3px rgba(21, 51, 58, 0.15);
+}
+
+.aba--problema[aria-pressed="true"] {
+  color: var(--erro);
+}
+
+/* List rows (elements): rounded, like the problem cards. */
+.lista__itens {
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+}
+
+.item {
+  min-height: 3.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+}
+
+.item:hover {
+  background: var(--sal);
+  border-color: var(--linha);
+}
+
+.item[aria-current="true"] {
+  background: var(--acento-suave);
+  border-color: var(--acento);
+  box-shadow: inset 0 0 0 1px var(--acento);
+}
+
+.lateral__duplicados,
+.lateral__problemas {
+  min-height: 2.75rem;
+  border-radius: 0.75rem;
+}
+
+.lateral__duplicados {
+  border-color: var(--linha);
+  background: var(--sal);
+}
+
+.painel__titulo {
+  font-size: 1.125rem;
+}
+
+/* The analysis sidebar is sized in rem so it grows with the text. */
+@media (min-width: 1100px) {
+  .analise {
+    --lateral: 22rem;
+  }
+}
+
+/* Element panel content */
+.fotos,
+.avaliar {
+  padding: 0.5rem 1.25rem 1.5rem;
+}
+
+/* Menus */
+.flutuante {
+  border-radius: 0.875rem;
+}
+
+.menu__opcao {
+  border-radius: 0.625rem;
+}
+
+/* ---------- Home: toolbar and two cards, like the problems page ---------- */
+
+.inicio {
+  width: 100%;
+  max-width: 100rem;
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 2vw, 2rem) 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.inicio__topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.inicio__titulo {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.2rem + 0.8vw, 2rem);
+  white-space: normal;
+}
+
+.inicio__sub {
+  margin: 0.25rem 0 0;
+  color: var(--tinta-2);
+  max-width: 60ch;
+}
+
+.inicio__grelha {
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .inicio__grelha {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.envio,
+.analises {
+  margin: 0;
+  padding: 1.5rem;
+  background: var(--painel);
+  border: 1px solid var(--linha);
+  border-radius: 1rem;
+  box-shadow: var(--sombra-cartao);
+}
+
+.envio__titulo,
+.analises__titulo {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+.zona {
+  padding: 2.5rem 1.5rem;
+  background: var(--sal);
+  border: 2px dashed var(--linha);
+  border-radius: 0.875rem;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.zona:hover {
+  border-color: var(--controlo);
+}
+
+.zona--ativa {
+  background: var(--acento-suave);
+  border-color: var(--acento);
+}
+
+.analises__lista {
+  gap: 0.5rem;
+  border-top: 0;
+}
+
+.analise-item {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--linha);
+  border-radius: 0.875rem;
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.analise-item:hover {
+  background: #ffffff;
+  border-color: var(--controlo);
+  box-shadow: var(--sombra-cartao);
+}
+
+.analise-item__nome {
+  min-height: 2.5rem;
+  font-size: 1.0625rem;
+  text-decoration: none;
+}
+
+.analise-item__nome:hover {
+  color: var(--acento);
+  text-decoration: underline;
+}
+
+/* ---------- Problems page and citizen pages: rem widths so they use big screens ---------- */
+
+.tecnico {
+  max-width: 100rem;
+  padding: 1.5rem clamp(1rem, 2vw, 2rem);
+}
+
+.cidadao--larga {
+  max-width: 80rem;
+}
+
+.cidadao--media {
+  max-width: 60rem;
+}
+
+.cabecalho-cidadao__dentro {
+  max-width: 80rem;
+}
+
+.segmentado__item {
+  min-height: 2.5rem;
+}
+
+.pilula {
+  min-height: 2.375rem;
+}
+
+.cartao-reporte__foto,
+.meu-reporte__foto {
+  width: 4.5rem;
+  height: 4rem;
+}
+
+@media (min-width: 1280px) {
+  .tecnico__grelha {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+
+  .cartao-reporte__foto {
+    width: 6rem;
+    height: 4.5rem;
+  }
+}
+
+.tecnico__ferramentas .campo-icone {
+  width: 16rem;
+}
+
+@media (max-width: 699px) {
+  .tecnico__ferramentas .campo-icone {
+    width: auto;
+  }
+}
+
+/* Icons inside controls follow the text size instead of a fixed pixel size. */
+.botao svg.lucide,
+.botao-g svg.lucide,
+.nav-tecnico svg.lucide,
+.segmentado svg.lucide,
+.pilula svg.lucide,
+.campo-icone svg.lucide,
+.lateral__duplicados svg,
+.lateral__problemas svg.lucide,
+.exportar svg.lucide,
+.etiqueta svg.lucide,
+.metadados svg.lucide,
+.confirmacoes svg.lucide {
+  width: 1.15em;
+  height: 1.15em;
+}
+
+.metadados {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+/* Toolbar fields wrap onto their own line on narrow screens instead of being squeezed. */
+.tecnico__ferramentas {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 699px) {
+  .inicio__topo .tecnico__ferramentas {
+    width: 100%;
+  }
+
+  .inicio__topo .tecnico__ferramentas > * {
+    flex: 1 1 100%;
+  }
+}
