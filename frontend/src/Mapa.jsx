@@ -17,8 +17,8 @@ function iconeGrupo(grupo) {
   });
 }
 
-function icone(indice, estado, ativo, duplicado) {
-  const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}`;
+function icone(indice, estado, ativo, duplicado, problema) {
+  const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}${problema ? " pino--com-reporte" : ""}`;
   return L.divIcon({
     className: "pino-caixa",
     html: `<span class="${classes}"></span>`,
@@ -108,8 +108,8 @@ export default function Mapa({
           id: p.id,
           duplicado,
           posicao: [lat, lon],
-          titulo: `${nome}, ${rotuloEstado(p.estado)}, confiança ${percentagem(p.confianca)}${duplicado ? ", possível duplicado" : ""}`,
-          icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId, duplicado),
+          titulo: `${nome}, ${rotuloEstado(p.estado)}, confiança ${percentagem(p.confianca)}${duplicado ? ", possível duplicado" : ""}${p.reportes_abertos ? `, ${p.reportes_abertos} problema(s) reportado(s)` : ""}`,
+          icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId, duplicado, p.reportes_abertos > 0),
         };
       }),
     [config, comPosicao, selecionadoId, duplicadosIds],

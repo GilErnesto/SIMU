@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { guardar, ler } from "./armazenamento.js";
 import ListaAnalises from "./ListaAnalises.jsx";
 import Marca from "./Marca.jsx";
+import Navegacao from "./Navegacao.jsx";
 import ZonaDeEnvio from "./ZonaDeEnvio.jsx";
 import ZonaNoMapa from "./ZonaNoMapa.jsx";
 
@@ -52,6 +53,7 @@ export default function Inicio() {
     <div className="pagina">
       <header className="cabecalho cabecalho--simples cabecalho--inicio">
         <Marca />
+        <Navegacao />
       </header>
       <div className="faixa-tecnico">
         <label htmlFor="tecnico-inicio">Técnico</label>

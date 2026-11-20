@@ -1,5 +1,7 @@
 """Detection on overlapping native-resolution tiles, for small signs in big photos."""
 
+from dataclasses import replace
+
 from pipeline.detect.panorama import nms
 from pipeline.models import Detection
 
@@ -29,9 +31,7 @@ def detetar_com_ladrilhos(detetor, nome: str, imagem) -> list:
             for d in detetor.detect(nome, imagem[y : y + LADO_LADRILHO, x : x + LADO_LADRILHO]):
                 x1, y1, x2, y2= d.bbox_xyxy
                 caixa= (x1 + x, y1 + y, x2 + x, y2 + y)
-                deteccoes.append(
-                    Detection(nome, d.category, d.class_name, caixa, d.confidence, d.obstruido)
-                )
+                deteccoes.append(replace(d, image_id=nome, bbox_xyxy=caixa))
     return nms(deteccoes, 10**9)
 
 

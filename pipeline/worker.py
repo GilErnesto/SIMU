@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from pipeline.anonymize.egoblur import Anonymizer
-from pipeline.catalog import analises
+from pipeline.catalog import analises, reportes
 from pipeline.catalog.write import Analise, ensure_schema, known_image_ids, write_catalog
 from pipeline.config import Classes, Municipio, aplicar_bbox, load_classes, load_municipio
 from pipeline.errors import ErroPipeline
@@ -20,7 +20,7 @@ from pipeline.geolocate.locate import locate
 from pipeline.ingest import mapillary, uploads
 from pipeline.run import CABECA_SINAL, NOME_CHECKPOINT, _detetor, _variavel, pesos_padrao, processar
 
-INTERVALO_S= 3.0
+INTERVALO_S= 1.0
 PASSO_PROGRESSO= 5
 
 
@@ -205,6 +205,14 @@ def main(argv: list[str] | None= None) -> int:
     try:
         while True:
             with Session(engine) as sessao:
+                # Citizens wait on screen for their photo: those go before any analysis.
+                reporte= reportes.reclamar_foto(sessao)
+                if reporte is not None:
+                    ok= reportes.processar_foto(
+                        sessao, reporte, anonimizador, detetor, Path(args.raw_dir), Path(args.anon_dir)
+                    )
+                    print(f"Reporte {reporte.token}: {'fotografia pronta' if ok else 'falhou'}.", flush=True)
+                    continue
                 analise= analises.reclamar_proxima(sessao)
                 if analise is not None:
                     print(f"A analisar {analise.token} ({analise.nome}).", flush=True)

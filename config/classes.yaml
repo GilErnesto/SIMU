@@ -15,6 +15,14 @@
 categorias:
   sinal:
     rotulo: Sinais
+    problemas:
+      danificado: Sinal danificado ou partido
+      torto: Sinal torto ou caído
+      tapado: Tapado por vegetação ou outro objeto
+      ilegivel: Desbotado ou ilegível
+      vandalizado: Vandalizado (grafitos, autocolantes)
+      em_falta: Sinal em falta
+      outro: Outro problema
     raio_dedup_m: 5
     altura_m: 0.7
     # 0.40 com o conjunto de quatro detetores (models/detetor.pt, detetor_b23.pt, detetor_b23_1280.pt,
@@ -118,6 +126,12 @@ categorias:
       - a car or a truck
   iluminacao:
     rotulo: Iluminação
+    problemas:
+      apagada: Lâmpada apagada à noite
+      acesa_de_dia: Acesa durante o dia
+      danificado: Poste ou candeeiro danificado
+      torto: Poste torto ou caído
+      outro: Outro problema
     raio_dedup_m: 6.5
     altura_m: 6
     alcance_max_m: 30
@@ -155,6 +169,11 @@ categorias:
         - a tall street lamp post
   residuos:
     rotulo: Resíduos
+    problemas:
+      cheio: Contentor cheio
+      danificado: Contentor danificado
+      lixo_a_volta: Lixo à volta do contentor
+      outro: Outro problema
     raio_dedup_m: 10
     altura_m: 1.2
     limiar_detecao: 0.3

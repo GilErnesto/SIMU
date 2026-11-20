@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import ImagemComZoom from "./ImagemComZoom.jsx";
 import {
+  ESTADOS_REPORTE,
   FONTES,
   METODOS,
   formatarData,
@@ -198,6 +199,20 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
         </div>
       )}
       {p?.obstruido && <p className="aviso">Sinal tapado ou vandalizado. Confirme o tipo antes de validar.</p>}
+      {p?.reportes?.length > 0 && (
+        <div className={p.reportes_abertos > 0 ? "aviso" : "nota"}>
+          <p>
+            <strong>Reportado por cidadãos:</strong>
+          </p>
+          <ul>
+            {p.reportes.map((r) => (
+              <li key={r.token}>
+                <Ligacao para={`/tecnico/reportes?r=${r.token}`}>{r.titulo}</Ligacao> ({ESTADOS_REPORTE[r.estado] ?? r.estado})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {p && total === 0 && <p className="nota">Este elemento não tem fotografias registadas.</p>}
       {p && total > 0 && (
         <>
