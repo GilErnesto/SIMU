@@ -1,167 +1,71 @@
-import L from "leaflet";
-import { useEffect, useMemo, useState } from "react";
-import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
+import * as ToggleGroup from "@radix-ui/react-toggle-group";
+import { CircleCheck, Download, Inbox, MapPinned, User, Users } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ligacaoReportesCsv, listarReportes, mudarEstadoReporte, obterConfig, obterReporte } from "./api.js";
+import { ligacaoReportes, listarReportes, obterConfig, urlFotoReporte } from "./api.js";
 import { guardar, ler } from "./armazenamento.js";
-import FotoReporte from "./FotoReporte.jsx";
+import DetalheProblema, { ABERTOS, ligacaoNoMapa, tipoProblema, tituloProblema } from "./DetalheProblema.jsx";
 import Marca from "./Marca.jsx";
-import Navegacao from "./Navegacao.jsx";
-import { descreverEvento, ESTADOS_REPORTE, formatarDataHora, rotuloCategoria, rotuloClasse, rotuloProblema } from "./rotulos.js";
+import { NavegacaoTecnico } from "./Navegacao.jsx";
+import { Etiqueta, IconeCategoria, Quando, Vazio } from "./ReportesUi.jsx";
+import { Ligacao } from "./rota.js";
 
-const ORIGENS= { browser: "localização do telemóvel", exif: "GPS da fotografia", mapa: "indicada no mapa pelo cidadão" };
-
-function icone(estado, ativo) {
-  return L.divIcon({
-    className: "pino-caixa",
-    html: `<span class="pino pino--problema pino--reporte-${estado}${ativo ? " pino--ativo" : ""}"></span>`,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-  });
-}
-
-function Enquadrar({ features, selecionado }) {
-  const mapa= useMap();
-  const chave= features.map((f) => f.properties.token).join(",");
-  useEffect(() => {
-    if (features.length === 0) return;
-    const limites= L.latLngBounds(features.map((f) => [f.geometry.coordinates[1], f.geometry.coordinates[0]]));
-    mapa.fitBounds(limites, { maxZoom: 18, padding: [40, 40], animate: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapa, chave]);
-  useEffect(() => {
-    const alvo= features.find((f) => f.properties.token === selecionado);
-    if (alvo) mapa.setView([alvo.geometry.coordinates[1], alvo.geometry.coordinates[0]], Math.max(mapa.getZoom(), 17), { animate: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapa, selecionado, chave]);
-  return null;
-}
-
-function titulo(config, p) {
-  const problema= rotuloProblema(config, p.categoria, p.problema);
-  const tipo= p.classe ? rotuloClasse(config, p.categoria, p.classe) : rotuloCategoria(config, p.categoria);
-  return `${problema} (${tipo})`;
-}
-
-function Detalhe({ config, token, tecnico, aoMudar }) {
-  const [reporte, setReporte]= useState(null);
-  const [nota, setNota]= useState("");
-  const [erro, setErro]= useState(null);
-  const [aGuardar, setAGuardar]= useState(false);
-
-  useEffect(() => {
-    const controlo= new AbortController();
-    setReporte(null);
-    setNota("");
-    setErro(null);
-    obterReporte(token, controlo.signal)
-      .then(setReporte)
-      .catch((e) => e.name !== "AbortError" && setErro(e.message));
-    return () => controlo.abort();
-  }, [token]);
-
-  async function mudar(estado) {
-    if (!tecnico.trim()) {
-      setErro("Indique o seu nome no campo Técnico.");
-      return;
-    }
-    setAGuardar(true);
-    setErro(null);
-    try {
-      const dados= await mudarEstadoReporte(token, { autor: tecnico.trim(), estado, nota: nota.trim() || null });
-      setReporte(dados);
-      setNota("");
-      aoMudar();
-    } catch (falha) {
-      setErro(falha.message);
-    } finally {
-      setAGuardar(false);
-    }
-  }
-
-  if (erro && !reporte) {
-    return (
-      <p className="mensagem mensagem--erro" role="alert">
-        {erro}
-      </p>
-    );
-  }
-  if (!reporte) return <p className="mensagem">A carregar o reporte…</p>;
-  const aberto= reporte.estado === "aberto" || reporte.estado === "em_resolucao";
+function CartaoProblema({ config, f, ativo, aoEscolher }) {
+  const p= f.properties;
+  const foto= urlFotoReporte(p);
+  const noMapa= ligacaoNoMapa(p);
   return (
-    <article className="painel-reporte">
-      <h2>{titulo(config, reporte)}</h2>
-      <p className={`etiqueta etiqueta--${reporte.estado}`}>{ESTADOS_REPORTE[reporte.estado] ?? reporte.estado}</p>
-      {reporte.descricao && <p className="painel-reporte__descricao">“{reporte.descricao}”</p>}
-      <FotoReporte reporte={reporte} />
-      <dl className="painel-reporte__dados">
-        <dt>Recebido</dt>
-        <dd>{formatarDataHora(reporte.criado_em)}</dd>
-        <dt>Posição</dt>
-        <dd>
-          {reporte.lat === null
-            ? "Desconhecida"
-            : `${reporte.lat.toFixed(5)}, ${reporte.lon.toFixed(5)} (${ORIGENS[reporte.origem_posicao] ?? reporte.origem_posicao})`}
-        </dd>
-        <dt>No catálogo</dt>
-        <dd>{reporte.elemento_id ? `Elemento n.º ${reporte.elemento_id}` : "Sem elemento correspondente a menos de 15 m"}</dd>
-      </dl>
-
-      <div className="campo">
-        <label htmlFor="nota-reporte">Nota para o cidadão (opcional)</label>
-        <textarea id="nota-reporte" rows={2} maxLength={1000} value={nota} onChange={(e) => setNota(e.target.value)} />
-      </div>
-      <div className="acoes">
-        {aberto ? (
-          <>
-            {reporte.estado === "aberto" && (
-              <button type="button" className="botao botao--secundario" disabled={aGuardar} onClick={() => mudar("em_resolucao")}>
-                Em resolução
-              </button>
-            )}
-            <button type="button" className="botao botao--principal" disabled={aGuardar} onClick={() => mudar("resolvido")}>
-              Resolvido
-            </button>
-            <button type="button" className="botao botao--secundario" disabled={aGuardar} onClick={() => mudar("rejeitado")}>
-              Não precisa de intervenção
-            </button>
-          </>
+    <li className="cartao-reporte__item">
+      <button type="button" className="cartao-reporte" aria-current={ativo ? "true" : undefined} onClick={aoEscolher}>
+        {foto ? (
+          <img className="cartao-reporte__foto" src={foto} alt="" />
         ) : (
-          <button type="button" className="botao botao--secundario" disabled={aGuardar} onClick={() => mudar("aberto")}>
-            Reabrir
-          </button>
+          <span className="cartao-reporte__foto meu-reporte__foto--vazia">
+            <IconeCategoria categoria={p.categoria} size={22} />
+          </span>
         )}
-      </div>
-      {erro && (
-        <p className="mensagem--erro" role="alert">
-          {erro}
-        </p>
+        <span className="cartao-reporte__corpo">
+          <span className="cartao-reporte__titulo">{tituloProblema(config, p)}</span>
+          <span className="cartao-reporte__sub">
+            <IconeCategoria categoria={p.categoria} size={14} /> {tipoProblema(config, p)}
+            {p.confirmacoes > 0 && (
+              <span className="cartao-reporte__confirmacoes">
+                <Users aria-hidden="true" size={14} /> {p.confirmacoes + 1}
+              </span>
+            )}
+          </span>
+          <span className="cartao-reporte__rodape">
+            <Etiqueta estado={p.estado} />
+            <span className="cartao-reporte__quando">
+              <Quando em={p.criado_em} />
+              {f.geometry ? "" : " · sem posição"}
+            </span>
+          </span>
+        </span>
+      </button>
+      {noMapa && (
+        <Ligacao para={noMapa} className="cartao-reporte__mapa" aria-label={`Ver ${tituloProblema(config, p)} no mapa`} title="Ver no mapa">
+          <MapPinned aria-hidden="true" size={18} />
+        </Ligacao>
       )}
-      <p className="nota">O cidadão recebe uma notificação a cada mudança de estado.</p>
-
-      <h3>Histórico</h3>
-      <ol className="historico">
-        {reporte.eventos.map((e, i) => (
-          <li key={i}>
-            <span className="historico__quando">{formatarDataHora(e.em)}</span> {descreverEvento(e)}
-          </li>
-        ))}
-      </ol>
-    </article>
+    </li>
   );
 }
 
-// /tecnico/reportes: the queue of citizens' reports, on a map and a list; the archive keeps the rest.
+// /tecnico/reportes: inbox of every citizen problem across analyses. The map work happens in each
+// analysis (/a/<código>), where these problems also appear; "Ver no mapa" goes there.
 export default function PainelReportes() {
   const [config, setConfig]= useState(null);
   const [vista, setVista]= useState("abertos");
-  const [categoria, setCategoria]= useState("");
-  const [lista, setLista]= useState({ estado: "a-carregar", features: [] });
+  const [categoria, setCategoria]= useState("todas");
+  const [todos, setTodos]= useState({ estado: "a-carregar", features: [] });
   const [selecionado, setSelecionado]= useState(() => new URLSearchParams(window.location.search).get("r"));
   const [tecnico, setTecnico]= useState(() => ler("tecnico", ""));
   const [versao, setVersao]= useState(0);
+  const detalhe= useRef(null);
 
   useEffect(() => {
+    document.title= "Problemas reportados - SIMU";
     const controlo= new AbortController();
     obterConfig(controlo.signal).then(setConfig).catch(() => {});
     return () => controlo.abort();
@@ -169,130 +73,169 @@ export default function PainelReportes() {
 
   useEffect(() => {
     const controlo= new AbortController();
-    listarReportes(vista, categoria, controlo.signal)
-      .then((dados) => setLista({ estado: "ok", features: dados.features }))
-      .catch((e) => e.name !== "AbortError" && setLista({ estado: "erro", features: [], erro: e.message }));
+    listarReportes("todos", null, controlo.signal)
+      .then((dados) => setTodos({ estado: "ok", features: dados.features }))
+      .catch((e) => e.name !== "AbortError" && setTodos({ estado: "erro", features: [], erro: e.message }));
     return () => controlo.abort();
-  }, [vista, categoria, versao]);
+  }, [versao]);
 
-  const comPosicao= useMemo(() => lista.features.filter((f) => f.geometry), [lista.features]);
+  const contagens= useMemo(() => {
+    const abertos= todos.features.filter((f) => ABERTOS.has(f.properties.estado)).length;
+    return { abertos, arquivo: todos.features.length - abertos };
+  }, [todos.features]);
+  const lista= useMemo(
+    () =>
+      todos.features.filter(
+        (f) =>
+          ABERTOS.has(f.properties.estado) === (vista === "abertos") &&
+          (categoria === "todas" || f.properties.categoria === categoria),
+      ),
+    [todos.features, vista, categoria],
+  );
+
+  function escolher(token) {
+    setSelecionado(token);
+    window.history.replaceState({}, "", `/tecnico/reportes?r=${encodeURIComponent(token)}`);
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      requestAnimationFrame(() => detalhe.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
+  }
 
   function mudarTecnico(valor) {
     setTecnico(valor);
     guardar("tecnico", valor);
   }
 
-  if (!config) return <p className="mensagem">A carregar…</p>;
-  const [lonMin, latMin, lonMax, latMax]= config.bbox;
   return (
-    <div className="pagina">
-      <header className="cabecalho cabecalho--simples cabecalho--inicio">
+    <div className="pagina pagina--tecnico">
+      <header className="cabecalho">
         <Marca />
-        <Navegacao />
+        <NavegacaoTecnico />
       </header>
-      <div className="faixa-tecnico">
-        <label htmlFor="tecnico-reportes">Técnico</label>
-        <input id="tecnico-reportes" autoComplete="name" maxLength={128} value={tecnico} onChange={(e) => mudarTecnico(e.target.value)} />
-        <a className="botao botao--secundario" href={ligacaoReportesCsv()} download>
-          Exportar arquivo (CSV)
-        </a>
-      </div>
-      <main className="painel-reportes">
-        <section className="painel-reportes__lista" aria-labelledby="titulo-reportes">
-          <h1 id="titulo-reportes">Reportes dos cidadãos</h1>
-          <div className="acoes" role="group" aria-label="Que reportes mostrar">
-            {[
-              ["abertos", "Por tratar"],
-              ["arquivo", "Arquivo"],
-            ].map(([id, rotulo]) => (
-              <button
-                key={id}
-                type="button"
-                className={vista === id ? "botao" : "botao botao--secundario"}
-                aria-pressed={vista === id}
-                onClick={() => {
-                  setVista(id);
-                  setSelecionado(null);
-                }}
-              >
-                {rotulo}
-              </button>
-            ))}
-            <select aria-label="Categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-              <option value="">Todas as categorias</option>
-              {Object.entries(config.categorias).map(([id, c]) => (
-                <option key={id} value={id}>
-                  {c.rotulo}
-                </option>
-              ))}
-            </select>
+      {!config ? (
+        <p className="mensagem">A carregar…</p>
+      ) : (
+        <main className="tecnico">
+          <div className="tecnico__topo">
+            <div>
+              <h1>Problemas reportados</h1>
+              <p className="tecnico__resumo">
+                {contagens.abertos === 0
+                  ? "Não há nada por tratar."
+                  : `${contagens.abertos} ${contagens.abertos === 1 ? "problema por tratar" : "problemas por tratar"}, de cidadãos de todas as zonas`}
+              </p>
+            </div>
+            <div className="tecnico__ferramentas">
+              <label className="campo-icone">
+                <User aria-hidden="true" size={18} />
+                <span className="visualmente-escondido">Técnico</span>
+                <input
+                  autoComplete="name"
+                  maxLength={128}
+                  placeholder="O seu nome (técnico)"
+                  value={tecnico}
+                  onChange={(e) => mudarTecnico(e.target.value)}
+                />
+              </label>
+              <div className="exportar" role="group" aria-label="Exportar todos os problemas">
+                <span className="exportar__rotulo">
+                  <Download aria-hidden="true" size={18} /> Exportar
+                </span>
+                <a className="exportar__botao" href={ligacaoReportes("csv")} download>
+                  CSV
+                </a>
+                <a className="exportar__botao" href={ligacaoReportes("geojson")} download>
+                  GeoJSON
+                </a>
+              </div>
+            </div>
           </div>
-          <MapContainer
-            className="painel-reportes__mapa"
-            bounds={[
-              [latMin, lonMin],
-              [latMax, lonMax],
-            ]}
-            maxZoom={20}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-              maxNativeZoom={19}
-              maxZoom={20}
-            />
-            <Enquadrar features={comPosicao} selecionado={selecionado} />
-            {comPosicao.map((f) => (
-              <Marker
-                key={f.properties.token}
-                position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}
-                icon={icone(f.properties.estado, f.properties.token === selecionado)}
-                title={titulo(config, f.properties)}
-                eventHandlers={{ click: () => setSelecionado(f.properties.token) }}
-              />
-            ))}
-          </MapContainer>
-          {lista.estado === "erro" && (
-            <p className="mensagem mensagem--erro" role="alert">
-              {lista.erro}
-            </p>
-          )}
-          {lista.estado === "ok" && lista.features.length === 0 && (
-            <p className="mensagem">{vista === "abertos" ? "Não há reportes por tratar." : "O arquivo está vazio."}</p>
-          )}
-          <ul className="lista__itens">
-            {lista.features.map((f) => {
-              const p= f.properties;
-              return (
-                <li key={p.token}>
-                  <button
-                    type="button"
-                    className="item"
-                    aria-current={p.token === selecionado ? "true" : undefined}
-                    onClick={() => setSelecionado(p.token)}
-                  >
-                    <span className={`pino pino--legenda pino--problema pino--reporte-${p.estado}`} aria-hidden="true" />
-                    <span className="item__texto">
-                      <span className="item__nome">{titulo(config, p)}</span>
-                      <span className="item__meta">
-                        {ESTADOS_REPORTE[p.estado] ?? p.estado}, {formatarDataHora(p.criado_em)}
-                        {f.geometry ? "" : ", sem posição"}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-        <section className="painel-reportes__detalhe" aria-label="Reporte escolhido">
-          {selecionado ? (
-            <Detalhe config={config} token={selecionado} tecnico={tecnico} aoMudar={() => setVersao((n) => n + 1)} />
-          ) : (
-            <p className="mensagem">Escolha um reporte na lista ou no mapa.</p>
-          )}
-        </section>
-      </main>
+
+          <div className="tecnico__filtros">
+            <ToggleGroup.Root
+              type="single"
+              className="segmentado"
+              aria-label="Que problemas mostrar"
+              value={vista}
+              onValueChange={(valor) => valor && setVista(valor)}
+            >
+              <ToggleGroup.Item value="abertos" className="segmentado__item">
+                Por tratar <span className="segmentado__contador">{contagens.abertos}</span>
+              </ToggleGroup.Item>
+              <ToggleGroup.Item value="arquivo" className="segmentado__item">
+                Arquivo <span className="segmentado__contador">{contagens.arquivo}</span>
+              </ToggleGroup.Item>
+            </ToggleGroup.Root>
+            <ToggleGroup.Root
+              type="single"
+              className="pilulas"
+              aria-label="Categoria"
+              value={categoria}
+              onValueChange={(valor) => valor && setCategoria(valor)}
+            >
+              <ToggleGroup.Item value="todas" className="pilula">
+                Todas
+              </ToggleGroup.Item>
+              {Object.entries(config.categorias).map(([id, c]) => (
+                <ToggleGroup.Item key={id} value={id} className="pilula">
+                  <IconeCategoria categoria={id} size={16} />
+                  {c.rotulo}
+                </ToggleGroup.Item>
+              ))}
+            </ToggleGroup.Root>
+          </div>
+
+          <div className="tecnico__grelha">
+            <section className="tecnico__lista" aria-label="Lista de problemas">
+              {todos.estado === "erro" && (
+                <p className="alerta alerta--erro" role="alert">
+                  {todos.erro}
+                </p>
+              )}
+              {todos.estado === "a-carregar" && (
+                <div className="cartao esqueleto" aria-label="A carregar">
+                  <span />
+                  <span />
+                </div>
+              )}
+              {todos.estado === "ok" && lista.length === 0 && (
+                <Vazio icone={vista === "abertos" ? CircleCheck : Inbox} titulo={vista === "abertos" ? "Tudo tratado" : "O arquivo está vazio"}>
+                  {vista === "abertos" ? "Não há problemas por tratar nesta categoria." : "Os problemas resolvidos aparecem aqui."}
+                </Vazio>
+              )}
+              <ul className="lista-reportes">
+                {lista.map((f) => (
+                  <CartaoProblema
+                    key={f.properties.token}
+                    config={config}
+                    f={f}
+                    ativo={f.properties.token === selecionado}
+                    aoEscolher={() => escolher(f.properties.token)}
+                  />
+                ))}
+              </ul>
+            </section>
+            <section className="tecnico__detalhe" ref={detalhe} aria-label="Problema escolhido">
+              {selecionado ? (
+                <DetalheProblema
+                  config={config}
+                  token={selecionado}
+                  tecnico={tecnico}
+                  aoMudar={() => setVersao((n) => n + 1)}
+                  aoFechar={() => {
+                    setSelecionado(null);
+                    window.history.replaceState({}, "", "/tecnico/reportes");
+                  }}
+                />
+              ) : (
+                <Vazio icone={Inbox} titulo="Escolha um problema">
+                  Veja a fotografia do cidadão e trate-o aqui, ou abra-o no mapa da análise com o botão de localização.
+                </Vazio>
+              )}
+            </section>
+          </div>
+        </main>
+      )}
     </div>
   );
 }

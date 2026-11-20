@@ -173,3 +173,56 @@ def test_pedidos_invalidos_do_cidadao(sessao, ambiente):
     assert cliente.post("/reportes", files={"foto": ("f.jpg", _foto(), "image/jpeg")}, data={"cidadao": "x"}).status_code == 422
     assert cliente.get("/reportes/nao-existe").status_code == 404
     assert cliente.get("/cidadaos/x/notificacoes").status_code == 422
+
+
+@precisa_bd
+def test_mesmo_problema_no_mesmo_elemento_confirma_o_reporte_aberto(sessao, ambiente):
+    from tests.test_backend import _criar
+
+    elemento_id= _criar(sessao, categoria="sinal", classe="stop", lon=LON + 0.00003, lat=LAT)
+    cliente= TestClient(app)
+    primeiro= _reporte_pronto(cliente, sessao, ambiente)
+    cliente.post(f"/reportes/{primeiro}/enviar", json={"indice": 0, "problema": "torto"})
+    segundo= _reporte_pronto(cliente, sessao, ambiente)
+    dados= cliente.post(f"/reportes/{segundo}/enviar", json={"indice": 0, "problema": "torto"}).json()
+    assert dados["principal"] == primeiro
+    outro= _reporte_pronto(cliente, sessao, ambiente)
+    assert cliente.post(f"/reportes/{outro}/enviar", json={"indice": 0, "problema": "vandalizado"}).json()["principal"] is None
+
+    fila= cliente.get("/reportes").json()["features"]
+    assert sorted(f["properties"]["token"] for f in fila) == sorted([primeiro, outro])
+    assert next(f for f in fila if f["properties"]["token"] == primeiro)["properties"]["confirmacoes"] == 1
+    mapa= cliente.get("/elementos", params={"com_reportes": True}).json()["features"]
+    assert mapa[0]["properties"]["reportes_abertos"] == 2
+
+    detalhe= cliente.get(f"/elementos/{elemento_id}").json()["properties"]
+    assert [o.get("cidadao", False) for o in detalhe["observacoes"]] == [True, True, True, False]
+    assert detalhe["n_fotos_cidadao"] == 3
+
+    # Resolving it through the confirmation's token resolves both and tells both citizens.
+    assert cliente.patch(f"/reportes/{segundo}", json={"autor": "Ana", "estado": "resolvido"}).status_code == 200
+    assert cliente.get(f"/reportes/{primeiro}").json()["estado"] == "resolvido"
+    assert cliente.get(f"/reportes/{segundo}").json()["estado"] == "resolvido"
+    assert cliente.get(f"/cidadaos/{CIDADAO}/notificacoes").json()["nao_lidas"] == 2
+
+
+@precisa_bd
+def test_reportes_de_uma_analise_incluem_os_soltos_na_sua_area(sessao, ambiente):
+    from pipeline.catalog import analises
+    from pipeline.catalog.write import Elemento
+    from tests.test_backend import _criar
+
+    elemento_id= _criar(sessao, categoria="sinal", classe="stop")
+    analise= analises.criar(sessao, "Zona", estado="concluida")
+    sessao.get(Elemento, elemento_id).analise_id= analise.id
+    sessao.flush()
+    cliente= TestClient(app)
+    perto= _reporte_pronto(cliente, sessao, ambiente, lon=LON + 0.0002, lat=LAT)
+    cliente.post(f"/reportes/{perto}/enviar", json={"categoria": "residuos", "problema": "cheio"})
+    longe= _reporte_pronto(cliente, sessao, ambiente, lon=LON + 0.05, lat=LAT)
+    cliente.post(f"/reportes/{longe}/enviar", json={"categoria": "residuos", "problema": "cheio"})
+    tokens= [f["properties"]["token"] for f in cliente.get("/reportes", params={"analise": analise.token}).json()["features"]]
+    assert tokens == [perto]
+    exportado= cliente.get("/reportes.geojson").json()
+    assert {f["properties"]["token"] for f in exportado["features"]} == {perto, longe}
+    assert exportado["features"][0]["properties"]["eventos"]

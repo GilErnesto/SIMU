@@ -9,6 +9,7 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from geoalchemy2 import WKTElement
 from geoalchemy2.shape import to_shape
@@ -118,16 +119,40 @@ def _area(observacao: Observacao) -> float:
     return (x2 - x1) * (y2 - y1)
 
 
+def _foto_cidadao(reporte: Reporte) -> dict:
+    """A citizen's report photo, shaped like an observation so the photo strip and viewer can show it."""
+    return {
+        "id": f"r{reporte.id}",
+        "cidadao": True,
+        "bbox": reporte.caixa,
+        "classe": reporte.classe,
+        "confianca": None,
+        "bearing": None,
+        "imagem": {
+            "id": None,
+            "fonte": "cidadao",
+            "autor": "Cidadão",
+            "licenca": "Fotografia enviada num reporte",
+            "url_origem": "",
+            "capturada_em": reporte.criado_em,
+            "url": f"/reportes/{reporte.token}/foto",
+        },
+    }
+
+
 def _detalhe(elemento: Elemento) -> dict:
     sessao= Session.object_session(elemento)
     ligados= list(
         sessao.scalars(select(Reporte).where(Reporte.elemento_id == elemento.id).order_by(Reporte.criado_em.desc()))
     )
-    abertos= sum(r.estado in reportes.ABERTOS for r in ligados)
-    feature= to_feature(elemento, abertos)
+    principais= [r for r in ligados if r.principal_id is None and r.estado != "rascunho"]
+    feature= to_feature(elemento, sum(r.estado in reportes.ABERTOS for r in principais))
     classes= get_classes()
-    feature["properties"]["reportes"]= [reportes.para_json(classes, r) for r in ligados]
-    feature["properties"]["observacoes"]= [
+    feature["properties"]["reportes"]= [reportes.para_json(classes, r) for r in principais]
+    # The citizens' photos come first: they show the problem; the survey photos follow as before.
+    fotos_cidadao= [_foto_cidadao(r) for r in ligados if r.caminho_anon and r.estado != "rascunho"]
+    feature["properties"]["n_fotos_cidadao"]= len(fotos_cidadao)
+    feature["properties"]["observacoes"]= fotos_cidadao + [
         {
             "id": obs.id,
             "bbox": obs.bbox,
@@ -417,18 +442,38 @@ async def criar_reporte(
 def listar_reportes(
     estado: Literal["abertos", "arquivo", "todos"]= "abertos",
     categoria: str | None= None,
+    analise: str | None= None,
     sessao: Session= Depends(get_session),
     classes: Classes= Depends(get_classes),
 ):
-    """Technician queue as GeoJSON: open reports, or the archive (resolved and rejected)."""
+    """Technician queue as GeoJSON: open reports, or the archive (resolved and rejected); with `analise`,
+    only those on that analysis' map."""
     _verificar_categoria(categoria, classes)
+    return _reportes_geojson(sessao, classes, estado, categoria, _analise_id(sessao, analise))
+
+
+def _reportes_geojson(sessao, classes, estado="todos", categoria=None, analise_id=None, eventos=False) -> dict:
     estados= {"abertos": reportes.ABERTOS, "arquivo": ("resolvido", "rejeitado"), "todos": None}[estado]
     features= []
-    for reporte in reportes.listar(sessao, estados, categoria):
-        dados= reportes.para_json(classes, reporte)
+    for reporte in reportes.listar(sessao, estados, categoria, analise_id):
+        dados= reportes.para_json(classes, reporte, eventos=eventos)
         geometria= None if dados["lon"] is None else {"type": "Point", "coordinates": [dados["lon"], dados["lat"]]}
         features.append({"type": "Feature", "geometry": geometria, "properties": dados})
     return {"type": "FeatureCollection", "features": features}
+
+
+@app.get("/reportes.geojson")
+def exportar_reportes_geojson(
+    estado: Literal["abertos", "arquivo", "todos"]= "todos",
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    """Every report (confirmations counted, not repeated) with its full history, for GIS tools."""
+    return JSONResponse(
+        jsonable_encoder(_reportes_geojson(sessao, classes, estado, eventos=True)),
+        media_type="application/geo+json",
+        headers={"Content-Disposition": 'attachment; filename="reportes.geojson"'},
+    )
 
 
 @app.get("/reportes.csv")
@@ -439,7 +484,7 @@ def exportar_reportes(sessao: Session= Depends(get_session), classes: Classes= D
     escritor.writerow(
         [
             "reporte", "titulo", "categoria", "classe", "problema", "lon", "lat", "elemento_id",
-            "estado_atual", "evento", "autor", "nota", "em",
+            "confirmacoes", "estado_atual", "evento", "autor", "nota", "em",
         ]
     )
     for reporte in reportes.listar(sessao):
@@ -448,7 +493,7 @@ def exportar_reportes(sessao: Session= Depends(get_session), classes: Classes= D
             escritor.writerow(
                 [
                     reporte.id, dados["titulo"], reporte.categoria, reporte.classe, reporte.problema,
-                    dados["lon"], dados["lat"], reporte.elemento_id, reporte.estado,
+                    dados["lon"], dados["lat"], reporte.elemento_id, dados["confirmacoes"], reporte.estado,
                     evento.estado, evento.autor, evento.nota, evento.em.isoformat(),
                 ]
             )
@@ -540,7 +585,7 @@ def notificacoes(cidadao: str, sessao: Session= Depends(get_session)):
     return {
         "nao_lidas": sum(not n.lida for n, _ in linhas),
         "notificacoes": [
-            {"id": n.id, "texto": n.texto, "lida": n.lida, "criada_em": n.criada_em, "reporte": token}
+            {"id": n.id, "estado": n.estado, "texto": n.texto, "lida": n.lida, "criada_em": n.criada_em, "reporte": token}
             for n, token in linhas
         ],
     }

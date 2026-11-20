@@ -30,7 +30,7 @@ export function obterConfig(sinal) {
   return pedir("/config", { signal: sinal });
 }
 
-function parametrosDe({ analise, categoria, classe, estado, minObservacoes, minConfianca }) {
+function parametrosDe({ analise, categoria, classe, estado, minObservacoes, minConfianca, comReportes }) {
   const parametros= new URLSearchParams();
   if (analise) parametros.set("analise", analise);
   if (categoria) parametros.set("categoria", categoria);
@@ -38,6 +38,7 @@ function parametrosDe({ analise, categoria, classe, estado, minObservacoes, minC
   if (estado) parametros.set("estado", estado);
   if (minObservacoes) parametros.set("min_observacoes", minObservacoes);
   if (minConfianca) parametros.set("min_confianca", minConfianca);
+  if (comReportes) parametros.set("com_reportes", "true");
   const texto= parametros.toString();
   return texto ? `?${texto}` : "";
 }
@@ -160,9 +161,10 @@ export function enviarReporte(token, corpo) {
   });
 }
 
-export function listarReportes(estado, categoria, sinal) {
+export function listarReportes(estado, categoria, sinal, analise) {
   const parametros= new URLSearchParams({ estado });
   if (categoria) parametros.set("categoria", categoria);
+  if (analise) parametros.set("analise", analise);
   return pedir(`/reportes?${parametros}`, { signal: sinal });
 }
 
@@ -174,8 +176,8 @@ export function mudarEstadoReporte(token, corpo) {
   });
 }
 
-export function ligacaoReportesCsv() {
-  return `${BASE}/reportes.csv`;
+export function ligacaoReportes(formato) {
+  return `${BASE}/reportes.${formato}`;
 }
 
 export function urlFotoReporte(reporte) {

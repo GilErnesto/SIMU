@@ -16,6 +16,7 @@ export const FONTES= {
   kartaview: "KartaView",
   video: "Vídeo",
   upload: "Ficheiro enviado",
+  cidadao: "Reporte de um cidadão",
 };
 
 export const ESTADOS_ANALISE= {

@@ -57,13 +57,20 @@ Desde 20/11 o EgoBlur corre duas passagens (a segunda sobre a imagem já desfoca
 
 ### Reportes dos cidadãos
 
-Os problemas (sinal torto, candeeiro apagado, contentor cheio...) vêm só dos cidadãos; não há avaliação automática do estado.
+Os problemas (sinal torto, candeeiro apagado, contentor cheio...) vêm só dos cidadãos; não há avaliação automática do estado. A interface tem duas áreas separadas:
 
-1. **Reportar problema** (`/reportar`): o cidadão tira uma fotografia. O browser pede a localização (só funciona em HTTPS ou `localhost`; sem ela usa-se o GPS da fotografia ou o cidadão toca no mapa).
-2. O worker desfoca rostos e matrículas, procura os objetos na fotografia (o mesmo detetor das análises) e mostra-os em caixas numeradas. Os reportes passam à frente das análises na fila.
-3. O cidadão toca no objeto (ou indica o tipo, se não estiver assinalado), escolhe o problema da lista da categoria (`problemas` em `config/classes.yaml`) e envia. O reporte liga-se ao elemento do catálogo da mesma categoria a menos de 15 m (o do mesmo tipo primeiro), que passa a aparecer no mapa da análise com um anel vermelho e "N problemas reportados".
-4. **Painel do técnico** (`/tecnico/reportes`): mapa e lista dos reportes por tratar, com a fotografia e a caixa. O técnico (nome no campo Técnico) marca "Em resolução", "Resolvido" ou "Não precisa de intervenção", com uma nota opcional. O separador Arquivo guarda os tratados e permite reabri-los; "Exportar arquivo (CSV)" dá o histórico completo.
-5. **Notificações** (`/notificacoes`): cada mudança de estado gera uma notificação para o cidadão, com contador de não lidas no topo. Não há contas: o cidadão é identificado por um código aleatório guardado no browser, por isso as notificações só aparecem no dispositivo onde fez o reporte.
+**Cidadão** (`/reportar`, `/notificacoes`; sem conta, sem ligações para a área do técnico):
+
+1. **Reportar** (`/reportar`): o cidadão tira ou escolhe uma fotografia. O browser pede a localização (só funciona em HTTPS ou `localhost`; sem ela usa-se o GPS da fotografia ou o cidadão toca no mapa).
+2. O worker desfoca rostos e matrículas e procura os objetos na fotografia (o mesmo detetor das análises), mostrados em caixas numeradas. Os reportes passam à frente das análises na fila.
+3. O cidadão toca no objeto (ou indica o tipo, se não estiver assinalado), escolhe o problema (`problemas` em `config/classes.yaml`) e envia. O reporte liga-se ao elemento do catálogo da mesma categoria a menos de 15 m (o do mesmo tipo primeiro); não cria elementos novos.
+4. **Notificações** (sino no canto superior direito): cada mudança de estado gera uma notificação. O cidadão é identificado por um código aleatório guardado no browser, por isso só as vê no dispositivo onde reportou.
+
+**Técnico** (`/`, `/a/<código>`, `/tecnico/reportes`; navegação "Análises" e "Problemas" com o número por tratar):
+
+- **No mapa da análise** os elementos com problemas por tratar têm um pino vermelho com "!" (sempre visível, fora dos agrupamentos), e os problemas sem elemento a menos de 15 m aparecem como losangos vermelhos. Na lista, "Problemas reportados por cidadãos" filtra só esses elementos. No painel do elemento, a primeira fotografia é a do cidadão ("Foto do cidadão"); as do levantamento seguem-se como antes. O separador **Problema** mostra o reporte e permite marcá-lo "Em resolução", "Resolvido" ou "Não precisa de intervenção", com uma nota para o cidadão.
+- **Problemas** (`/tecnico/reportes`): caixa de entrada com os problemas de todas as zonas, separador Arquivo (resolvidos, que se podem reabrir) e exportação em CSV ou GeoJSON com o histórico. "Ver no mapa" abre a análise no elemento (`/a/<código>?e=<id>`).
+- **Repetidos**: se outro cidadão reportar o mesmo problema no mesmo elemento enquanto está aberto, o reporte junta-se ao existente como confirmação ("Reportado por N cidadãos"): a fotografia entra na galeria do elemento, e todos são notificados quando o técnico o tratar.
 
 Cada passo fica em `reporte_evento` (nunca se apaga).
 
@@ -128,7 +135,7 @@ Aparece como uma análise por zona. Imagens já registadas são ignoradas. Opç�
 - `POST /elementos/{id}/juntar` (`{origem, autor}`) e `POST /elementos/{id}/separar` (`{observacoes, autor}`): revisão manual, sempre registada em `correcao`.
 - `GET /imagens/{id}`: só serve ficheiros de `ANON_DIR`.
 - Reportes do cidadão: `POST /reportes` (fotografia, `cidadao`, `lon`/`lat` opcionais), `GET /reportes/{token}`, `GET /reportes/{token}/foto` e `POST /reportes/{token}/enviar` (`{indice | categoria, problema, descricao, lon, lat}`). Notificações: `GET /cidadaos/{id}/notificacoes`, `POST /cidadaos/{id}/notificacoes/lidas` e `GET /cidadaos/{id}/reportes`.
-- Técnico: `GET /reportes?estado=abertos|arquivo|todos&categoria=` (GeoJSON), `PATCH /reportes/{token}` (`{autor, estado, nota}`, notifica o cidadão) e `GET /reportes.csv`. `GET /elementos?com_reportes=true` mostra só os elementos com reportes por tratar.
+- Técnico: `GET /reportes?estado=abertos|arquivo|todos&categoria=&analise=` (GeoJSON; com `analise`, os da sua zona), `PATCH /reportes/{token}` (`{autor, estado, nota}`, notifica quem reportou e quem confirmou), `GET /reportes.csv` e `GET /reportes.geojson` (com o histórico). `GET /elementos?com_reportes=true` mostra só os elementos com reportes por tratar.
 
 ## Testes
 

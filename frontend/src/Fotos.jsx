@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 
 import ImagemComZoom from "./ImagemComZoom.jsx";
 import {
-  ESTADOS_REPORTE,
   FONTES,
   METODOS,
   formatarData,
@@ -15,7 +14,12 @@ import { Ligacao } from "./rota.js";
 
 export function legendaDe(imagem) {
   const fonte= FONTES[imagem.fonte] ?? imagem.fonte;
-  const origem= imagem.fonte === "upload" || imagem.fonte === "video" ? `${fonte}` : `Foto de ${imagem.autor} no ${fonte}`;
+  const origem=
+    imagem.fonte === "cidadao"
+      ? "Foto do cidadão"
+      : imagem.fonte === "upload" || imagem.fonte === "video"
+        ? `${fonte}`
+        : `Foto de ${imagem.autor} no ${fonte}`;
   return `${origem}${imagem.capturada_em ? `, ${formatarData(imagem.capturada_em)}` : ""}. ${imagem.licenca}.`;
 }
 
@@ -85,6 +89,7 @@ export function Miniatura({ observacao, indice, total, marcada, aoMarcar, aoAbri
         onClick={() => aoAbrir(indice)}
       >
         <ImagemComCaixa observacao={observacao} />
+        {observacao.cidadao && <span className="miniatura__cidadao">Foto do cidadão</span>}
       </button>
       {aoMarcar && (
         <label className="miniatura__marcar">
@@ -199,20 +204,6 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
         </div>
       )}
       {p?.obstruido && <p className="aviso">Sinal tapado ou vandalizado. Confirme o tipo antes de validar.</p>}
-      {p?.reportes?.length > 0 && (
-        <div className={p.reportes_abertos > 0 ? "aviso" : "nota"}>
-          <p>
-            <strong>Reportado por cidadãos:</strong>
-          </p>
-          <ul>
-            {p.reportes.map((r) => (
-              <li key={r.token}>
-                <Ligacao para={`/tecnico/reportes?r=${r.token}`}>{r.titulo}</Ligacao> ({ESTADOS_REPORTE[r.estado] ?? r.estado})
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       {p && total === 0 && <p className="nota">Este elemento não tem fotografias registadas.</p>}
       {p && total > 0 && (
         <>
@@ -224,7 +215,7 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
                   indice={indice}
                   total={total}
                   marcada={marcadas.has(observacao.id)}
-                  aoMarcar={total > 1 ? alternar : undefined}
+                  aoMarcar={total - (p.n_fotos_cidadao ?? 0) > 1 && !observacao.cidadao ? alternar : undefined}
                   aoAbrir={aoAmpliar}
                 />
               </li>

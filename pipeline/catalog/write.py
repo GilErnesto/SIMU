@@ -144,6 +144,9 @@ class Reporte(Base):
     geom= mapped_column(Geometry("POINT", srid=4326))
     origem_posicao: Mapped[str | None]= mapped_column(String(16))
     elemento_id: Mapped[int | None]= mapped_column(ForeignKey("elemento.id"), index=True)
+    # Same problem on the same element while an earlier report is open: this one confirms it, follows its
+    # state and is not listed on its own for the technician.
+    principal_id: Mapped[int | None]= mapped_column(ForeignKey("reporte.id"), index=True)
     criado_em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
     atualizado_em: Mapped[datetime]= mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -170,6 +173,8 @@ class Notificacao(Base):
     id: Mapped[int]= mapped_column(primary_key=True)
     cidadao_id: Mapped[str]= mapped_column(String(64), index=True)
     reporte_id: Mapped[int]= mapped_column(ForeignKey("reporte.id"))
+    # The report's new state, so the page can show the right icon.
+    estado: Mapped[str | None]= mapped_column(String(16))
     texto: Mapped[str]= mapped_column(Text)
     lida: Mapped[bool]= mapped_column(Boolean, default=False)
     criada_em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -188,6 +193,10 @@ def ensure_schema(engine: Engine) -> None:
                 text(f"CREATE INDEX IF NOT EXISTS ix_{tabela}_analise_id ON {tabela} (analise_id)")
             )
         conexao.execute(text("ALTER TABLE observacao ALTER COLUMN bearing DROP NOT NULL"))
+        conexao.execute(text("ALTER TABLE notificacao ADD COLUMN IF NOT EXISTS estado varchar(16)"))
+        conexao.execute(
+            text("ALTER TABLE reporte ADD COLUMN IF NOT EXISTS principal_id integer REFERENCES reporte(id)")
+        )
     with Session(engine) as sessao:
         atribuir_analise_inicial(sessao)
         sessao.commit()

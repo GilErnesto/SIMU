@@ -28,6 +28,14 @@ function icone(indice, estado, ativo, duplicado, problema) {
 }
 
 const SEM_DUPLICADOS= new Set();
+const SEM_PROBLEMAS= [];
+
+const ICONE_PROBLEMA_SOLTO= L.divIcon({
+  className: "pino-caixa",
+  html: '<span class="pino pino--problema"></span>',
+  iconSize: [44, 44],
+  iconAnchor: [22, 22],
+});
 
 const ICONE_CANDIDATO= L.divIcon({
   className: "pino-caixa",
@@ -90,6 +98,8 @@ export default function Mapa({
   aoSelecionar,
   aoEscolherPosicao,
   duplicadosIds= SEM_DUPLICADOS,
+  problemasSoltos= SEM_PROBLEMAS,
+  aoAbrirProblemaSolto,
 }) {
   const [lonMin, latMin, lonMax, latMax]= config.bbox;
   const comPosicao= useMemo(() => features.filter((feature) => feature.geometry), [features]);
@@ -107,6 +117,7 @@ export default function Mapa({
         return {
           id: p.id,
           duplicado,
+          problema: p.reportes_abertos > 0,
           posicao: [lat, lon],
           titulo: `${nome}, ${rotuloEstado(p.estado)}, confiança ${percentagem(p.confianca)}${duplicado ? ", possível duplicado" : ""}${p.reportes_abertos ? `, ${p.reportes_abertos} problema(s) reportado(s)` : ""}`,
           icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId, duplicado, p.reportes_abertos > 0),
@@ -133,7 +144,7 @@ export default function Mapa({
       <Foco alvo={foco} />
       <EscolherPosicao ativo={modoMover} aoEscolher={aoEscolherPosicao} />
       <MarkerClusterGroup key={chaveDuplicados} iconCreateFunction={iconeGrupo} showCoverageOnHover={false}>
-        {marcadores.map((m) => (
+        {marcadores.filter((m) => !m.problema).map((m) => (
           <Marker
             key={m.id}
             position={m.posicao}
@@ -152,6 +163,35 @@ export default function Mapa({
           />
         ))}
       </MarkerClusterGroup>
+      {/* Elements with an open citizen problem stay out of the clusters: always visible. */}
+        {marcadores.filter((m) => m.problema).map((m) => (
+          <Marker
+            key={m.id}
+            position={m.posicao}
+            icon={m.icone}
+            title={m.titulo}
+            duplicado={m.duplicado}
+            zIndexOffset={1000}
+            eventHandlers={{
+              click: () => aoSelecionar(m.id, "mapa"),
+              keydown: (evento) => {
+                if (evento.originalEvent.key === "Enter" || evento.originalEvent.key === " ") {
+                  evento.originalEvent.preventDefault();
+                  aoSelecionar(m.id, "mapa");
+                }
+              },
+            }}
+          />
+        ))}
+      {problemasSoltos.map((f) => (
+        <Marker
+          key={f.properties.token}
+          position={[f.geometry.coordinates[1], f.geometry.coordinates[0]]}
+          icon={ICONE_PROBLEMA_SOLTO}
+          title={`Problema reportado sem elemento no catálogo: ${f.properties.titulo}`}
+          eventHandlers={{ click: () => aoAbrirProblemaSolto?.(f.properties.token) }}
+        />
+      ))}
       {posicaoCandidata && (
         <Marker position={posicaoCandidata} icon={ICONE_CANDIDATO} keyboard={false} interactive={false} />
       )}

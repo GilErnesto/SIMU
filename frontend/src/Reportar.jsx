@@ -1,13 +1,27 @@
+import L from "leaflet";
+import {
+  Camera,
+  Check,
+  CircleCheck,
+  CircleHelp,
+  Images,
+  LoaderCircle,
+  MapPin,
+  MousePointerClick,
+  Plus,
+  ScanSearch,
+  Send,
+  ShieldCheck,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
-import L from "leaflet";
 
 import { criarReporte, enviarReporte, obterConfig, obterReporte } from "./api.js";
 import { idCidadao } from "./armazenamento.js";
 import FotoReporte from "./FotoReporte.jsx";
-import Marca from "./Marca.jsx";
-import Navegacao from "./Navegacao.jsx";
-import { descreverEvento, ESTADOS_REPORTE, formatarDataHora, rotuloCategoria, rotuloClasse, rotuloProblema } from "./rotulos.js";
+import { CabecalhoCidadao } from "./Navegacao.jsx";
+import { Etiqueta, IconeCategoria, LinhaDoTempo, Quando } from "./ReportesUi.jsx";
+import { rotuloCategoria, rotuloClasse, rotuloProblema } from "./rotulos.js";
 import { ir, Ligacao } from "./rota.js";
 
 const ESPERA_FOTO_MS= 1000;
@@ -33,26 +47,27 @@ function localizacao() {
   });
 }
 
-function Pagina({ titulo, children }) {
+export function PaginaCidadao({ children, largura= "media" }) {
   return (
-    <div className="pagina">
-      <header className="cabecalho cabecalho--simples cabecalho--inicio">
-        <Marca />
-        <Navegacao />
-      </header>
-      <main className="reporte">
-        <h1 className="reporte__titulo">{titulo}</h1>
-        {children}
-      </main>
+    <div className="pagina pagina--cidadao">
+      <CabecalhoCidadao />
+      <main className={`cidadao cidadao--${largura}`}>{children}</main>
     </div>
   );
 }
+
+const PASSOS_INICIO= [
+  { Icone: Camera, titulo: "Fotografe", texto: "o sinal, candeeiro ou contentor" },
+  { Icone: MousePointerClick, titulo: "Toque no objeto", texto: "e diga qual é o problema" },
+  { Icone: CircleCheck, titulo: "Acompanhe", texto: "e receba uma notificação quando estiver resolvido" },
+];
 
 // /reportar: take or choose a photo; it is sent at once and the worker looks for objects in it.
 export function NovoReporte() {
   const [erro, setErro]= useState(null);
   const [aEnviar, setAEnviar]= useState(false);
-  const entrada= useRef(null);
+  const camara= useRef(null);
+  const galeria= useRef(null);
 
   async function escolher(evento) {
     const foto= evento.target.files?.[0];
@@ -71,33 +86,57 @@ export function NovoReporte() {
   }
 
   return (
-    <Pagina titulo="Reportar um problema">
-      <p>
-        Viu um sinal danificado, um candeeiro apagado ou um contentor cheio? Tire uma fotografia: o sistema encontra os
-        objetos e só tem de tocar no que quer reportar.
-      </p>
-      <input
-        ref={entrada}
-        id="foto-reporte"
-        className="visualmente-escondido"
-        type="file"
-        accept="image/jpeg,image/png"
-        capture="environment"
-        onChange={escolher}
-      />
-      <button type="button" className="botao botao--principal reporte__foto" disabled={aEnviar} onClick={() => entrada.current?.click()}>
-        {aEnviar ? "A enviar a fotografia…" : "Tirar ou escolher fotografia"}
-      </button>
-      <p className="nota">
-        Os rostos e as matrículas são desfocados antes de a fotografia ser guardada. A localização é pedida ao browser
-        para indicar onde está o problema.
-      </p>
-      {erro && (
-        <p className="mensagem mensagem--erro" role="alert">
-          {erro}
+    <PaginaCidadao largura="larga">
+      <div className="inicio-grelha">
+      <section className="cartao cartao--destaque inicio-reporte">
+        <span className="inicio-reporte__icone" aria-hidden="true">
+          <Camera size={34} strokeWidth={1.9} />
+        </span>
+        <h1>Viu algum problema na rua?</h1>
+        <p className="inicio-reporte__sub">
+          Sinais danificados, candeeiros apagados, contentores cheios: tire uma fotografia e a Câmara trata do resto.
         </p>
-      )}
-    </Pagina>
+        <input ref={camara} className="visualmente-escondido" type="file" accept="image/jpeg,image/png" capture="environment" onChange={escolher} tabIndex={-1} />
+        <input ref={galeria} className="visualmente-escondido" type="file" accept="image/jpeg,image/png" onChange={escolher} tabIndex={-1} />
+        <div className="inicio-reporte__botoes">
+          <button type="button" className="botao-g botao-g--principal" disabled={aEnviar} onClick={() => camara.current?.click()}>
+            {aEnviar ? <LoaderCircle className="a-rodar" aria-hidden="true" size={20} /> : <Camera aria-hidden="true" size={20} />}
+            {aEnviar ? "A enviar a fotografia…" : "Tirar fotografia"}
+          </button>
+          <button type="button" className="botao-g botao-g--secundario" disabled={aEnviar} onClick={() => galeria.current?.click()}>
+            <Images aria-hidden="true" size={20} />
+            Escolher da galeria
+          </button>
+        </div>
+        {erro && (
+          <p className="alerta alerta--erro" role="alert">
+            {erro}
+          </p>
+        )}
+      </section>
+
+      <div className="inicio-grelha__lado">
+      <h2 className="passos-inicio__titulo">Como funciona</h2>
+      <ol className="passos-inicio">
+        {PASSOS_INICIO.map(({ Icone, titulo, texto }, i) => (
+          <li key={titulo} className="passos-inicio__passo">
+            <span className="passos-inicio__numero">{i + 1}</span>
+            <Icone aria-hidden="true" size={22} />
+            <span>
+              <strong>{titulo}</strong> {texto}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      <p className="nota-privacidade">
+        <ShieldCheck aria-hidden="true" size={18} />
+        Os rostos e as matrículas são desfocados antes de a fotografia ser guardada. A localização só serve para
+        indicar onde está o problema.
+      </p>
+      </div>
+      </div>
+    </PaginaCidadao>
   );
 }
 
@@ -109,7 +148,7 @@ function EscolherNoMapa({ config, posicao, aoEscolher }) {
   const [lonMin, latMin, lonMax, latMax]= config.bbox;
   return (
     <MapContainer
-      className="reporte__mapa"
+      className="cartao__mapa"
       bounds={[
         [latMin, lonMin],
         [latMax, lonMax],
@@ -128,6 +167,20 @@ function EscolherNoMapa({ config, posicao, aoEscolher }) {
   );
 }
 
+function Passo({ numero, titulo, feito, children }) {
+  return (
+    <section className="cartao passo" aria-labelledby={`passo-${numero}`}>
+      <h2 id={`passo-${numero}`} className="passo__titulo">
+        <span className={feito ? "passo__numero passo__numero--feito" : "passo__numero"}>
+          {feito ? <Check aria-hidden="true" size={16} strokeWidth={3} /> : numero}
+        </span>
+        {titulo}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
 function Escolha({ config, reporte, aoEnviado }) {
   const [indice, setIndice]= useState(reporte.caixas.length === 1 ? 0 : null);
   const [semCaixa, setSemCaixa]= useState(reporte.caixas.length === 0);
@@ -141,25 +194,28 @@ function Escolha({ config, reporte, aoEnviado }) {
   const categoriaEscolhida= semCaixa ? categoria : indice !== null ? reporte.caixas[indice].categoria : "";
   const problemas= config.categorias[categoriaEscolhida]?.problemas ?? [];
   const precisaPosicao= reporte.lat === null;
+  const pronto= Boolean(categoriaEscolhida && problema);
 
-  function descreverCaixa(caixa) {
-    return `${rotuloCategoria(config, caixa.categoria)}: ${rotuloClasse(config, caixa.categoria, caixa.classe)}`;
+  function nomeCaixa(caixa) {
+    return rotuloClasse(config, caixa.categoria, caixa.classe);
   }
 
   function escolherCaixa(novo) {
+    if (reporte.caixas[novo].categoria !== categoriaEscolhida) setProblema("");
     setIndice(novo);
     setSemCaixa(false);
-    if (reporte.caixas[novo].categoria !== categoriaEscolhida) setProblema("");
+  }
+
+  function semAssinalar() {
+    setSemCaixa(true);
+    setIndice(null);
+    setProblema("");
   }
 
   async function enviar(evento) {
     evento.preventDefault();
-    if (!categoriaEscolhida) {
-      setErro("Toque no objeto que quer reportar, ou indique o tipo.");
-      return;
-    }
-    if (!problema) {
-      setErro("Escolha qual é o problema.");
+    if (!pronto) {
+      setErro(categoriaEscolhida ? "Escolha qual é o problema." : "Toque no objeto que quer reportar.");
       return;
     }
     setErro(null);
@@ -176,129 +232,191 @@ function Escolha({ config, reporte, aoEnviado }) {
     }
   }
 
+  const resumo= categoriaEscolhida
+    ? [
+        semCaixa ? rotuloCategoria(config, categoria) : nomeCaixa(reporte.caixas[indice]),
+        problema ? rotuloProblema(config, categoriaEscolhida, problema) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "Nenhum objeto escolhido";
+
   return (
-    <form className="reporte__passos" onSubmit={enviar}>
-      <section>
-        <h2>1. Qual é o objeto?</h2>
-        {reporte.caixas.length > 0 ? (
-          <p className="nota">Toque na caixa do objeto com o problema.</p>
-        ) : (
-          <p className="nota">Não encontrámos nenhum objeto na fotografia. Indique o tipo abaixo.</p>
-        )}
-        <FotoReporte reporte={reporte} escolhida={semCaixa ? null : indice} aoEscolher={escolherCaixa} rotuloCaixa={descreverCaixa} />
-        {reporte.caixas.length > 0 && (
-          <ul className="reporte__objetos">
-            {reporte.caixas.map((caixa, i) => (
-              <li key={i}>
-                <button
-                  type="button"
-                  className={!semCaixa && i === indice ? "botao" : "botao botao--secundario"}
-                  aria-pressed={!semCaixa && i === indice}
-                  onClick={() => escolherCaixa(i)}
-                >
-                  {i + 1}. {descreverCaixa(caixa)}
-                </button>
-              </li>
-            ))}
-            <li>
+    <form className="fluxo" onSubmit={enviar}>
+      <header className="fluxo__cabeca">
+        <h1>Novo reporte</h1>
+        <p>Diga-nos o que está mal. Demora menos de um minuto.</p>
+      </header>
+
+      <div className="fluxo__colunas">
+      <div className="fluxo__coluna fluxo__coluna--foto">
+      <Passo numero={1} titulo="Qual é o objeto?" feito={Boolean(categoriaEscolhida)}>
+        <p className="passo__ajuda">
+          {reporte.caixas.length > 0
+            ? `Encontrámos ${reporte.caixas.length} ${reporte.caixas.length === 1 ? "objeto" : "objetos"}. Toque na fotografia ou escolha da lista.`
+            : "Não encontrámos nenhum objeto na fotografia. Escolha o tipo abaixo."}
+        </p>
+        <FotoReporte reporte={reporte} escolhida={semCaixa ? null : indice} aoEscolher={escolherCaixa} rotuloCaixa={nomeCaixa} />
+        <div className="grelha-objetos" role="group" aria-label="Objetos na fotografia">
+          {reporte.caixas.map((caixa, i) => {
+            const ativo= !semCaixa && i === indice;
+            return (
+              <button key={i} type="button" className="objeto" aria-pressed={ativo} onClick={() => escolherCaixa(i)}>
+                <span className="objeto__numero">{i + 1}</span>
+                <IconeCategoria categoria={caixa.categoria} size={20} />
+                <span className="objeto__texto">
+                  <span className="objeto__nome">{nomeCaixa(caixa)}</span>
+                  <span className="objeto__tipo">{rotuloCategoria(config, caixa.categoria)}</span>
+                </span>
+                {ativo && <Check className="objeto__visto" aria-hidden="true" size={18} strokeWidth={3} />}
+              </button>
+            );
+          })}
+          {reporte.caixas.length > 0 && (
+            <button type="button" className="objeto objeto--outro" aria-pressed={semCaixa} onClick={semAssinalar}>
+              <CircleHelp aria-hidden="true" size={20} />
+              <span className="objeto__texto">
+                <span className="objeto__nome">Não está assinalado</span>
+                <span className="objeto__tipo">Escolho o tipo à mão</span>
+              </span>
+            </button>
+          )}
+        </div>
+        {semCaixa && (
+          <div className="grelha-tipos" role="radiogroup" aria-label="Tipo de objeto">
+            {Object.entries(config.categorias).map(([id, c]) => (
               <button
+                key={id}
                 type="button"
-                className={semCaixa ? "botao" : "botao botao--secundario"}
-                aria-pressed={semCaixa}
+                role="radio"
+                aria-checked={categoria === id}
+                className="tipo"
                 onClick={() => {
-                  setSemCaixa(true);
-                  setIndice(null);
+                  setCategoria(id);
                   setProblema("");
                 }}
               >
-                O objeto não está assinalado
+                <IconeCategoria categoria={id} size={26} />
+                {c.rotulo}
               </button>
-            </li>
-          </ul>
-        )}
-        {semCaixa && (
-          <div className="campo">
-            <label htmlFor="reporte-categoria">Tipo de objeto</label>
-            <select
-              id="reporte-categoria"
-              value={categoria}
-              onChange={(e) => {
-                setCategoria(e.target.value);
-                setProblema("");
-              }}
-            >
-              <option value="">Escolha…</option>
-              {Object.entries(config.categorias).map(([id, c]) => (
-                <option key={id} value={id}>
-                  {c.rotulo}
-                </option>
-              ))}
-            </select>
+            ))}
           </div>
         )}
-      </section>
+      </Passo>
+      </div>
 
+      <div className="fluxo__coluna">
+      {!categoriaEscolhida && (
+        <div className="cartao passo passo--espera">
+          <h2 className="passo__titulo">
+            <span className="passo__numero">2</span>
+            Qual é o problema?
+          </h2>
+          <p className="passo__ajuda">Escolha primeiro o objeto na fotografia.</p>
+        </div>
+      )}
       {categoriaEscolhida && (
-        <fieldset className="reporte__problemas">
-          <legend>
-            <h2>2. Qual é o problema?</h2>
-          </legend>
-          {problemas.map((p) => (
-            <label key={p.id} className="opcao">
-              <input type="radio" name="problema" value={p.id} checked={problema === p.id} onChange={() => setProblema(p.id)} />
-              {p.rotulo}
-            </label>
-          ))}
-          <div className="campo">
-            <label htmlFor="reporte-descricao">Detalhes (opcional)</label>
-            <textarea id="reporte-descricao" rows={3} maxLength={1000} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+        <Passo numero={2} titulo="Qual é o problema?" feito={Boolean(problema)}>
+          <div className="grelha-problemas" role="radiogroup" aria-label="Problema">
+            {problemas.map((p) => (
+              <label key={p.id} className="problema">
+                <input type="radio" name="problema" value={p.id} checked={problema === p.id} onChange={() => setProblema(p.id)} />
+                <span className="problema__marca" aria-hidden="true">
+                  <Check size={14} strokeWidth={3.5} />
+                </span>
+                {p.rotulo}
+              </label>
+            ))}
           </div>
-        </fieldset>
+          <label className="campo-g">
+            <span className="campo-g__rotulo">
+              Detalhes <span className="campo-g__opcional">(opcional)</span>
+            </span>
+            <textarea
+              rows={3}
+              maxLength={1000}
+              placeholder="Por exemplo: está assim desde a tempestade de ontem"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+          </label>
+        </Passo>
       )}
 
       {categoriaEscolhida && precisaPosicao && (
-        <section>
-          <h2>3. Onde é?</h2>
-          <p className="nota">
-            Não conseguimos obter a localização. Toque no mapa no sítio do problema (opcional, mas ajuda o técnico a
-            encontrá-lo).
+        <Passo numero={3} titulo="Onde é?" feito={Boolean(posicao)}>
+          <p className="passo__ajuda">
+            <MapPin aria-hidden="true" size={16} /> Não conseguimos obter a localização. Toque no mapa no sítio do
+            problema (opcional, mas ajuda a encontrá-lo).
           </p>
           <EscolherNoMapa config={config} posicao={posicao} aoEscolher={setPosicao} />
-        </section>
+        </Passo>
       )}
 
-      {erro && (
-        <p className="mensagem mensagem--erro" role="alert">
-          {erro}
-        </p>
-      )}
-      <button type="submit" className="botao botao--principal" disabled={aEnviar}>
-        {aEnviar ? "A enviar…" : "Enviar reporte"}
-      </button>
+      <div className="barra-envio">
+        <div className="barra-envio__dentro">
+          <span className="barra-envio__resumo">{resumo}</span>
+          <button type="submit" className="botao-g botao-g--principal" disabled={aEnviar || !pronto}>
+            {aEnviar ? <LoaderCircle className="a-rodar" aria-hidden="true" size={18} /> : <Send aria-hidden="true" size={18} />}
+            {aEnviar ? "A enviar…" : "Enviar reporte"}
+          </button>
+        </div>
+        {erro && (
+          <p className="alerta alerta--erro barra-envio__erro" role="alert">
+            {erro}
+          </p>
+        )}
+      </div>
+      </div>
+      </div>
     </form>
   );
 }
 
-function Seguimento({ config, reporte }) {
+function Seguimento({ config, reporte, acabado }) {
   return (
-    <section className="reporte__seguimento">
-      <p className={`etiqueta etiqueta--${reporte.estado}`}>{ESTADOS_REPORTE[reporte.estado] ?? reporte.estado}</p>
-      <p>
-        <strong>{rotuloProblema(config, reporte.categoria, reporte.problema)}</strong>
-        {reporte.classe ? `, ${rotuloClasse(config, reporte.categoria, reporte.classe)}` : `, ${rotuloCategoria(config, reporte.categoria)}`}
-      </p>
-      {reporte.descricao && <p>{reporte.descricao}</p>}
-      <FotoReporte reporte={reporte} />
-      <h2>Histórico</h2>
-      <ol className="historico">
-        {reporte.eventos.map((e, i) => (
-          <li key={i}>
-            <span className="historico__quando">{formatarDataHora(e.em)}</span> {descreverEvento(e)}
-          </li>
-        ))}
-      </ol>
-      <p className="nota">Quando o reporte mudar de estado, recebe uma notificação em Notificações.</p>
-    </section>
+    <div className="fluxo">
+      {acabado && (
+        <section className="cartao sucesso" role="status">
+          <span className="sucesso__icone" aria-hidden="true">
+            <CircleCheck size={30} />
+          </span>
+          <div>
+            <h1>Reporte enviado. Obrigado!</h1>
+            <p>A equipa da Câmara vai analisá-lo. Recebe uma notificação sempre que o estado mudar.</p>
+          </div>
+        </section>
+      )}
+      <section className="cartao seguimento">
+        <div className="seguimento__cabeca">
+          <span className="seguimento__icone" aria-hidden="true">
+            <IconeCategoria categoria={reporte.categoria} size={22} />
+          </span>
+          <div>
+            {!acabado && <p className="seguimento__antes">O seu reporte</p>}
+            <h2>{rotuloProblema(config, reporte.categoria, reporte.problema)}</h2>
+            <p className="seguimento__sub">
+              {reporte.classe ? rotuloClasse(config, reporte.categoria, reporte.classe) : rotuloCategoria(config, reporte.categoria)}
+              {" · "}
+              <Quando em={reporte.criado_em} />
+            </p>
+          </div>
+          <Etiqueta estado={reporte.estado} grande />
+        </div>
+        {reporte.descricao && <blockquote className="seguimento__descricao">{reporte.descricao}</blockquote>}
+        <div className="seguimento__colunas">
+          <FotoReporte reporte={reporte} />
+          <div>
+            <h3 className="seguimento__titulo">Histórico</h3>
+            <LinhaDoTempo eventos={reporte.eventos} />
+          </div>
+        </div>
+      </section>
+      <Ligacao para="/reportar" className="botao-g botao-g--secundario botao-g--largo">
+        <Plus aria-hidden="true" size={18} />
+        Reportar outro problema
+      </Ligacao>
+    </div>
   );
 }
 
@@ -307,7 +425,7 @@ export function PaginaReporte({ token }) {
   const [config, setConfig]= useState(null);
   const [reporte, setReporte]= useState(null);
   const [erro, setErro]= useState(null);
-  const [enviado, setEnviado]= useState(false);
+  const [acabado, setAcabado]= useState(false);
 
   useEffect(() => {
     const controlo= new AbortController();
@@ -333,52 +451,61 @@ export function PaginaReporte({ token }) {
     };
   }, [token]);
 
-  let conteudo;
   if (erro) {
-    conteudo= (
-      <p className="mensagem mensagem--erro" role="alert">
-        {erro}
-      </p>
-    );
-  } else if (!reporte || !config) {
-    conteudo= <p className="mensagem">A carregar…</p>;
-  } else if (reporte.estado_foto === "na_fila") {
-    conteudo= (
-      <p className="mensagem" role="status">
-        A procurar sinais, candeeiros e contentores na fotografia…
-      </p>
-    );
-  } else if (reporte.estado_foto === "falhou") {
-    conteudo= (
-      <div className="mensagem mensagem--erro" role="alert">
-        <p>Não foi possível analisar a fotografia: {reporte.erro}</p>
-        <Ligacao para="/reportar" className="botao">
-          Tentar outra fotografia
-        </Ligacao>
-      </div>
-    );
-  } else if (reporte.estado === "rascunho") {
-    conteudo= (
-      <Escolha
-        config={config}
-        reporte={reporte}
-        aoEnviado={(dados) => {
-          setReporte(dados);
-          setEnviado(true);
-        }}
-      />
-    );
-  } else {
-    conteudo= (
-      <>
-        {enviado && (
-          <p className="mensagem mensagem--ok" role="status">
-            Reporte enviado. Obrigado! Pode acompanhá-lo nesta página.
-          </p>
-        )}
-        <Seguimento config={config} reporte={reporte} />
-      </>
+    return (
+      <PaginaCidadao>
+        <p className="alerta alerta--erro" role="alert">
+          {erro}
+        </p>
+      </PaginaCidadao>
     );
   }
-  return <Pagina titulo={reporte?.estado && reporte.estado !== "rascunho" ? "O seu reporte" : "Reportar um problema"}>{conteudo}</Pagina>;
+  if (!reporte || !config || reporte.estado_foto === "na_fila") {
+    return (
+      <PaginaCidadao>
+        <section className="cartao a-analisar" role="status" aria-live="polite">
+          <span className="a-analisar__icone" aria-hidden="true">
+            <ScanSearch size={30} />
+          </span>
+          <h1>A analisar a fotografia</h1>
+          <p>A procurar sinais, candeeiros e contentores. Demora só uns segundos.</p>
+          <div className="a-analisar__barra" aria-hidden="true">
+            <span />
+          </div>
+        </section>
+      </PaginaCidadao>
+    );
+  }
+  if (reporte.estado_foto === "falhou") {
+    return (
+      <PaginaCidadao>
+        <section className="cartao">
+          <p className="alerta alerta--erro" role="alert">
+            Não foi possível analisar a fotografia: {reporte.erro}
+          </p>
+          <Ligacao para="/reportar" className="botao-g botao-g--principal">
+            <Camera aria-hidden="true" size={18} />
+            Tentar outra fotografia
+          </Ligacao>
+        </section>
+      </PaginaCidadao>
+    );
+  }
+  return (
+    <PaginaCidadao largura={reporte.estado === "rascunho" ? "larga" : "media"}>
+      {reporte.estado === "rascunho" ? (
+        <Escolha
+          config={config}
+          reporte={reporte}
+          aoEnviado={(dados) => {
+            setReporte(dados);
+            setAcabado(true);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
+      ) : (
+        <Seguimento config={config} reporte={reporte} acabado={acabado} />
+      )}
+    </PaginaCidadao>
+  );
 }

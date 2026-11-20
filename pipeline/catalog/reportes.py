@@ -11,7 +11,7 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 
-from pipeline.catalog.write import Elemento, Notificacao, Reporte, ReporteEvento
+from pipeline.catalog.write import Analise, Elemento, Notificacao, Reporte, ReporteEvento
 from pipeline.config import Classes
 
 # Report states: rascunho (photo sent, object not chosen yet) -> aberto -> em_resolucao -> resolvido | rejeitado.
@@ -209,10 +209,41 @@ def enviar(
         ponto= to_shape(reporte.geom)
         elemento= elemento_proximo(sessao, categoria, ponto.x, ponto.y, classe)
         reporte.elemento_id= None if elemento is None else elemento.id
-    reporte.estado= "aberto"
-    _evento(sessao, reporte, "aberto", AUTOR_CIDADAO, classes.categorias[categoria].problemas[problema])
+    rotulo= classes.categorias[categoria].problemas[problema]
+    principal= _aberto_igual(sessao, reporte)
+    if principal is not None:
+        # Already reported and still open: confirm it instead of opening a second one.
+        reporte.principal_id= principal.id
+        reporte.estado= principal.estado
+        _evento(sessao, reporte, "aberto", AUTOR_CIDADAO, rotulo)
+        _evento(sessao, principal, principal.estado, AUTOR_CIDADAO, "Confirmado por outro cidadão")
+    else:
+        reporte.estado= "aberto"
+        _evento(sessao, reporte, "aberto", AUTOR_CIDADAO, rotulo)
     sessao.commit()
     return reporte
+
+
+def _aberto_igual(sessao: Session, reporte: Reporte) -> Reporte | None:
+    """The open report of the same problem on the same catalogue element, if any."""
+    if reporte.elemento_id is None:
+        return None
+    return sessao.scalars(
+        select(Reporte)
+        .where(
+            Reporte.elemento_id == reporte.elemento_id,
+            Reporte.problema == reporte.problema,
+            Reporte.estado.in_(ABERTOS),
+            Reporte.principal_id.is_(None),
+            Reporte.id != reporte.id,
+        )
+        .order_by(Reporte.id)
+        .limit(1)
+    ).first()
+
+
+def confirmacoes(sessao: Session, reporte: Reporte) -> list[Reporte]:
+    return list(sessao.scalars(select(Reporte).where(Reporte.principal_id == reporte.id).order_by(Reporte.id)))
 
 
 def descrever(classes: Classes, reporte: Reporte) -> str:
@@ -230,16 +261,20 @@ def mudar_estado(sessao: Session, classes: Classes, reporte: Reporte, estado: st
         raise ErroReporte("Estado inválido")
     if reporte.estado == "rascunho":
         raise ErroReporte("O cidadão ainda não enviou este reporte", 409)
+    if reporte.principal_id is not None:
+        reporte= sessao.get(Reporte, reporte.principal_id)
     if estado == reporte.estado:
         return reporte
-    reporte.estado= estado
-    reporte.atualizado_em= datetime.now(UTC)
     nota= (nota or "").strip()[:1000] or None
-    _evento(sessao, reporte, estado, autor, nota)
-    texto= f"O seu reporte “{descrever(classes, reporte)}” {AVISOS[estado]}."
-    if nota:
-        texto+= f" Nota do técnico: {nota}"
-    sessao.add(Notificacao(cidadao_id=reporte.cidadao_id, reporte_id=reporte.id, texto=texto))
+    # The report and every citizen's confirmation of it change together, and each citizen is told.
+    for alvo in [reporte, *confirmacoes(sessao, reporte)]:
+        alvo.estado= estado
+        alvo.atualizado_em= datetime.now(UTC)
+        _evento(sessao, alvo, estado, autor, nota)
+        texto= f"O seu reporte “{descrever(classes, alvo)}” {AVISOS[estado]}."
+        if nota:
+            texto+= f" Nota do técnico: {nota}"
+        sessao.add(Notificacao(cidadao_id=alvo.cidadao_id, reporte_id=alvo.id, estado=estado, texto=texto))
     sessao.commit()
     return reporte
 
@@ -266,9 +301,24 @@ def para_json(classes: Classes, reporte: Reporte, eventos: bool= False) -> dict:
         "lat": None if ponto is None else ponto.y,
         "origem_posicao": reporte.origem_posicao,
         "elemento_id": reporte.elemento_id,
+        "principal": None,
+        "confirmacoes": 0,
+        "analise": None,
         "criado_em": reporte.criado_em,
         "atualizado_em": reporte.atualizado_em,
     }
+    sessao= Session.object_session(reporte)
+    if sessao is not None:
+        if reporte.principal_id is not None:
+            dados["principal"]= sessao.scalar(select(Reporte.token).where(Reporte.id == reporte.principal_id))
+        else:
+            dados["confirmacoes"]= sessao.scalar(
+                select(func.count(Reporte.id)).where(Reporte.principal_id == reporte.id)
+            )
+        if reporte.elemento_id is not None:
+            dados["analise"]= sessao.scalar(
+                select(Analise.token).join(Elemento, Elemento.analise_id == Analise.id).where(Elemento.id == reporte.elemento_id)
+            )
     if eventos:
         dados["eventos"]= [
             {"estado": e.estado, "autor": e.autor, "nota": e.nota, "em": e.em} for e in reporte.eventos
@@ -276,8 +326,23 @@ def para_json(classes: Classes, reporte: Reporte, eventos: bool= False) -> dict:
     return dados
 
 
-def listar(sessao: Session, estados: tuple[str, ...] | None= None, categoria: str | None= None) -> list[Reporte]:
+def listar(
+    sessao: Session,
+    estados: tuple[str, ...] | None= None,
+    categoria: str | None= None,
+    analise_id: int | None= None,
+    principais: bool= True,
+) -> list[Reporte]:
+    """analise_id: reports on that analysis' elements, plus unlinked ones inside its area."""
     consulta= select(Reporte).where(Reporte.estado != "rascunho")
+    if principais:
+        consulta= consulta.where(Reporte.principal_id.is_(None))
+    if analise_id is not None:
+        area= select(func.ST_SetSRID(func.ST_Expand(func.ST_Extent(Elemento.geom), 0.0005), 4326)).where(Elemento.analise_id == analise_id)
+        consulta= consulta.where(
+            (Reporte.elemento_id.in_(select(Elemento.id).where(Elemento.analise_id == analise_id)))
+            | (Reporte.elemento_id.is_(None) & func.ST_Intersects(Reporte.geom, area.scalar_subquery()))
+        )
     if estados:
         consulta= consulta.where(Reporte.estado.in_(estados))
     if categoria:
@@ -290,7 +355,7 @@ def abertos_por_elemento(sessao: Session, ids: list[int]) -> dict[int, int]:
         return {}
     consulta= (
         select(Reporte.elemento_id, func.count(Reporte.id))
-        .where(Reporte.elemento_id.in_(ids), Reporte.estado.in_(ABERTOS))
+        .where(Reporte.elemento_id.in_(ids), Reporte.estado.in_(ABERTOS), Reporte.principal_id.is_(None))
         .group_by(Reporte.elemento_id)
     )
     return dict(sessao.execute(consulta).all())
