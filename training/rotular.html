@@ -23,6 +23,7 @@
   --papeleira: #1d4ed8;
   --subterraneo: #6d28d9;
   --nao_residuo: #b42318;
+  --residuo_outro: #b45309;
   --pendente: #9d00b8;
 }
 * { box-sizing: border-box; }
@@ -106,6 +107,7 @@ main {
 .caixa.papeleira { border-color: var(--papeleira); }
 .caixa.subterraneo { border-color: var(--subterraneo); }
 .caixa.nao_residuo { border-color: var(--nao_residuo); border-style: dashed; }
+.caixa.residuo_outro { border-color: var(--residuo_outro); }
 #recorte { display: block; width: 100%; height: auto; max-height: 220px; object-fit: contain; background: #222; }
 .opcao { display: flex; gap: 8px; align-items: center; min-height: 44px; margin-top: 6px; }
 .opcao input { width: 20px; height: 20px; }
@@ -169,6 +171,7 @@ aside h2 { font-size: 15px; margin: 0 0 8px; }
       <h2>Caixas da imagem</h2>
       <ol id="lista"></ol>
       <p class="nota" id="vazia" hidden>Sem caixas. Arrasta na fotografia para desenhar uma caixa em falta.</p>
+      <button id="apagar-todas" type="button">Apagar todas as caixas <kbd>X</kbd></button>
     </section>
     <section>
       <button id="gravar" class="primario" type="button">Gravar e seguir <kbd>Enter</kbd></button>
@@ -182,9 +185,10 @@ aside h2 { font-size: 15px; margin: 0 0 8px; }
         <dt><kbd>Enter</kbd></dt><dd>Gravar e seguir</dd>
         <dt><kbd>B</kbd></dt><dd>Imagem anterior</dd>
         <dt><kbd>S</kbd></dt><dd>Saltar sem gravar</dd>
-        <dt><kbd>+</kbd> <kbd>-</kbd></dt><dd>Zoom</dd>
+        <dt><kbd>+</kbd> <kbd>-</kbd></dt><dd>Zoom (também a roda do rato)</dd>
         <dt><kbd>T</kbd></dt><dd>Mostrar ou esconder as outras caixas</dd>
         <dt><kbd>Del</kbd></dt><dd>Apagar caixa desenhada</dd>
+        <dt><kbd>X</kbd></dt><dd>Apagar todas as caixas da imagem</dd>
       </dl>
     </section>
   </aside>
@@ -378,13 +382,50 @@ function apagarDesenhada() {
   render();
 }
 
+function apagarTodas() {
+  if (!estado.img || !estado.caixas.length) return;
+  const n= estado.caixas.length;
+  estado.caixas= [];
+  estado.sel= -1;
+  render();
+  aviso(`${n === 1 ? "1 caixa apagada" : `${n} caixas apagadas`}. Enter grava a imagem sem caixas.`);
+}
+
 function aplicarZoom() {
   el("palco").style.width= `${ZOOMS[estado.zoom] * 100}%`;
 }
 
-function mudarZoom(passo) {
-  estado.zoom= Math.max(0, Math.min(ZOOMS.length - 1, estado.zoom + passo));
+function mudarZoom(passo, cliente) {
+  const novo= Math.max(0, Math.min(ZOOMS.length - 1, estado.zoom + passo));
+  if (novo === estado.zoom) return;
+  const vista= el("vista");
+  const palco= el("palco");
+  let fx= 0.5;
+  let fy= 0.5;
+  let dx= vista.clientWidth / 2;
+  let dy= vista.clientHeight / 2;
+  if (cliente) {
+    const r= palco.getBoundingClientRect();
+    const v= vista.getBoundingClientRect();
+    fx= (cliente.x - r.left) / r.width;
+    fy= (cliente.y - r.top) / r.height;
+    dx= cliente.x - v.left;
+    dy= cliente.y - v.top;
+  }
+  estado.zoom= novo;
   aplicarZoom();
+  vista.scrollLeft= fx * palco.clientWidth - dx;
+  vista.scrollTop= fy * palco.clientHeight - dy;
+}
+
+let ultimaRoda= 0;
+function rodaDoRato(e) {
+  if (!estado.img) return;
+  e.preventDefault();
+  const agora= performance.now();
+  if (agora - ultimaRoda < 90) return;
+  ultimaRoda= agora;
+  mudarZoom(e.deltaY < 0 ? 1 : -1, { x: e.clientX, y: e.clientY });
 }
 
 // Classe proposta para uma deteção do modelo: a fixa da categoria (luzes) ou,
@@ -580,6 +621,8 @@ document.addEventListener("keydown", (e) => {
     alternarTodas(!el("todas").checked);
   } else if (e.key === "Delete") {
     apagarDesenhada();
+  } else if (e.key === "x" || e.key === "X") {
+    apagarTodas();
   } else {
     return;
   }
@@ -623,6 +666,10 @@ async function iniciar() {
     el("classes").append(botao);
   });
   el("apagar").addEventListener("click", apagarDesenhada);
+  el("apagar-todas").addEventListener("click", (e) => {
+    apagarTodas();
+    if (e.detail > 0) e.currentTarget.blur();
+  });
   try {
     el("auto").checked= localStorage.getItem(CHAVE_AUTO) !== "0";
   } catch (e) {
@@ -647,6 +694,7 @@ async function iniciar() {
   });
   const palco= el("palco");
   palco.addEventListener("pointerdown", iniciarDesenho);
+  el("vista").addEventListener("wheel", rodaDoRato, { passive: false });
   palco.addEventListener("pointermove", moverDesenho);
   palco.addEventListener("pointerup", terminarDesenho);
   palco.addEventListener("pointercancel", () => { estado.desenho= null; });

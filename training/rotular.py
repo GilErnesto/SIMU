@@ -35,12 +35,14 @@ ROTULAR= {
             "papeleira": "Papeleira",
             "subterraneo": "Subterrâneo",
             "nao_residuo": "Não é resíduo",
+            "residuo_outro": "Resíduo, sem tipo (óleos...)",
         },
         "sugerida": None,
         "negativa": "nao_residuo",
     },
 }
 CATEGORIA= os.environ.get("ROTULAR_CATEGORIA", "iluminacao")
+TODAS= os.environ.get("ROTULAR_TODAS") == "1"
 if CATEGORIA not in ROTULAR:
     raise RuntimeError(f"ROTULAR_CATEGORIA desconhecida: {CATEGORIA} (opções: {', '.join(ROTULAR)})")
 CONFIANCA_MIN= 0.3
@@ -148,6 +150,8 @@ def chave(id_fonte: str) -> str:
 
 def construir_fila(imagens: dict[str, dict]) -> list[dict]:
     existentes= sorted((i for i in imagens if ficheiro_imagem(i).is_file()), key=chave)
+    if TODAS:
+        return [{"id": i, "origem": "aleatoria"} for i in existentes]
     aleatorias= existentes[: (len(existentes) + 1) // 2]
     sorteadas= set(aleatorias)
     incertas= [

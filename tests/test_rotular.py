@@ -45,6 +45,12 @@ def test_fila_separa_aleatorias_e_incertas(cliente):
             assert item["id"] not in aleatorias
 
 
+def test_com_todas_a_fila_traz_todas_as_imagens_do_lote(cliente, monkeypatch):
+    monkeypatch.setattr(rotular, "TODAS", True)
+    fila= cliente.get("/api/lotes/lote_a/fila").json()
+    assert sorted(i["id"] for i in fila) == [str(i) for i in range(1, 9)]
+
+
 def test_imagem_devolve_deteccoes_acima_do_limiar(cliente):
     dados= cliente.get("/api/lotes/lote_a/imagens/2").json()
     assert [d["confianca"] for d in dados["deteccoes"]] == [0.4, 0.8]
@@ -57,6 +63,11 @@ def test_gravar_e_reler(cliente):
     assert cliente.get("/api/lotes/lote_a/imagens/1").json()["caixas"][0]["classe"] == "poste_luz"
     feitos= [i for i in cliente.get("/api/lotes/lote_a/fila").json() if i["feito"]]
     assert [i["id"] for i in feitos] == ["1"]
+
+
+def test_gravar_sem_caixas_guarda_lista_vazia_e_nao_repoe_as_do_modelo(cliente):
+    assert cliente.post("/api/lotes/lote_a/imagens/2", json={"caixas": []}).status_code == 200
+    assert cliente.get("/api/lotes/lote_a/imagens/2").json()["caixas"] == []
 
 
 def test_gravar_ultima_versao_vence(cliente):
@@ -128,6 +139,7 @@ def test_config_dos_residuos(cliente_residuos):
     assert config["negativa"] == "nao_residuo"
     assert config["sugerida"] is None
     assert "ilha_reciclagem" in [c["id"] for c in config["classes"]]
+    assert [c["id"] for c in config["classes"]][-1] == "residuo_outro"
 
 
 def test_residuos_so_mostra_deteccoes_de_residuos_com_a_classe(cliente_residuos):
