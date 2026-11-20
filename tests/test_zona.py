@@ -80,7 +80,7 @@ class Anonimizador:
 
 class Detetor:
     def detect(self, image_id, image):
-        return [Detection(image_id, "iluminacao", "candeeiro", (90.0, 40.0, 110.0, 60.0), 0.9, False)]
+        return [Detection(image_id, "iluminacao", "candeeiro", (90.0, 20.0, 110.0, 80.0), 0.9, False)]
 
 
 def _descarregar(registo):
@@ -177,6 +177,22 @@ def test_worker_zona_com_imagens_repetidas_avisa(tmp_path, sessao, monkeypatch):
     assert _executar(tmp_path, sessao, segunda) is True
     assert segunda.estado == "concluida"
     assert "1 imagem já existia noutra análise e ficou de fora" in segunda.avisos
+
+
+def test_worker_zona_com_demasiadas_imagens_falha_sem_processar(tmp_path, sessao, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_ZONA", "2")
+    _listar(monkeypatch, [_registo("m1"), _registo("m2", lon= -8.6474), _registo("m3", lon= -8.6473)])
+    analise= _zona(sessao)
+    assert _executar(tmp_path, sessao, analise) is False
+    assert analise.estado == "falhou"
+    assert analise.erro == "A zona tem 3 imagens, mais do que o máximo de 2 por análise. Escolha uma zona mais pequena."
+    assert sessao.scalars(select(Imagem).where(Imagem.analise_id == analise.id)).all() == []
+
+
+def test_worker_zona_no_limite_conclui(tmp_path, sessao, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_ZONA", "2")
+    _listar(monkeypatch, [_registo("m1"), _registo("m2", lon= -8.6474)])
+    assert _executar(tmp_path, sessao, _zona(sessao)) is True
 
 
 def test_worker_zona_sem_token_falha(tmp_path, sessao, monkeypatch):

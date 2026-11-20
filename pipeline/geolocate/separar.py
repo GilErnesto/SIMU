@@ -5,7 +5,7 @@ from itertools import combinations
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from pipeline.geolocate.triangulate import direction, intersect
+from pipeline.geolocate.triangulate import ALCANCE_MAX_M, direction, intersect
 
 IOU_DUPLICADA= 0.3
 CUSTO_MAX_M= 5.0
@@ -65,8 +65,13 @@ def _custo(i: int, posicao: tuple[float, float], observacoes: list, origens: lis
 
 
 def _posicao_final(
-    indices: list[int], observacoes: list, origens: list, posicao_semente: tuple[float, float], monocular: Callable, altura_m: float
-) -> tuple[tuple[float, float], str]:
+    indices: list[int],
+    observacoes: list,
+    origens: list,
+    monocular: Callable,
+    altura_m: float,
+    alcance_m: float= ALCANCE_MAX_M,
+) -> tuple[tuple[float, float], str] | None:
     melhores= {}
     for i in indices:
         imagem= observacoes[i].image.id
@@ -75,7 +80,7 @@ def _posicao_final(
     escolhidas= list(melhores.values())
     pontos= []
     for i, j in combinations(escolhidas, 2):
-        ponto= intersect(origens[i], observacoes[i].bearing, origens[j], observacoes[j].bearing)
+        ponto= intersect(origens[i], observacoes[i].bearing, origens[j], observacoes[j].bearing, alcance_m)
         if ponto is not None:
             pontos.append(ponto)
     if pontos:
@@ -83,7 +88,7 @@ def _posicao_final(
     monoculares= [p for p in (monocular(observacoes[i], origens[i], altura_m) for i in escolhidas) if p is not None]
     if monoculares:
         return tuple(np.mean(np.array(monoculares), axis=0)), "monocular"
-    return posicao_semente, "monocular"
+    return None
 
 
 def separar_mesma_imagem(
@@ -93,6 +98,7 @@ def separar_mesma_imagem(
     gerais: set[str],
     monocular: Callable,
     altura_m: float,
+    alcance_m: float= ALCANCE_MAX_M,
 ) -> list[list[Membro]]:
     indices= sorted(set().union(*(m[1] for m in membros)))
     por_imagem= _unidades(indices, observacoes, gerais)
@@ -123,8 +129,9 @@ def separar_mesma_imagem(
                 sementes.append({"posicao": posicao_da(unidade), "indices": list(unidade)})
     saida= []
     for semente in sementes:
-        ponto, metodo= _posicao_final(semente["indices"], observacoes, origens, semente["posicao"], monocular, altura_m)
-        saida.append([(ponto, set(semente["indices"]), metodo)])
+        final= _posicao_final(semente["indices"], observacoes, origens, monocular, altura_m, alcance_m)
+        if final is not None:
+            saida.append([(final[0], set(semente["indices"]), final[1])])
     return saida
 
 

@@ -67,11 +67,19 @@ def _cabecas(args: argparse.Namespace) -> dict[str, Path]:
         if caminho.exists():
             cabecas[categoria]= caminho
     return cabecas
+def _versao(args: argparse.Namespace, classes, ficheiros: list[Path]) -> str:
+    resumo= hashlib.sha1()
+    resumo.update(repr((tipo_de_detetor(args), args.limiar, args.sem_refinar, args.limiar_classe, classes)).encode())
+    for ficheiro in ficheiros:
+        resumo.update(ficheiro.read_bytes())
+    return resumo.hexdigest()[:16]
 
 
 def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
+    ficheiros= []
     if tipo_de_detetor(args) == "yolo":
         detetor= Detector.from_weights(Path(args.pesos), classes, limiar=args.limiar)
+        ficheiros.append(Path(args.pesos))
     else:
         from pipeline.detect.owl import OwlDetector
 
@@ -81,6 +89,27 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
 
         detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=_cabecas(args)), classes)
     return Limiares(detetor, classes) if limiares else detetor
+    cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
+    cabecas= {"sinal": cabeca} if cabeca.exists() else {}
+    cabeca_iluminacao= Path(getattr(args, "cabeca_iluminacao", None) or CABECA_ILUMINACAO)
+    if cabeca_iluminacao.exists():
+        cabecas["iluminacao"]= cabeca_iluminacao
+        ficheiros.extend(cabecas.values())
+        detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas), classes)
+    resultado= Limiares(detetor, classes) if limiares else detetor
+    resultado.versao= _versao(args, classes, ficheiros)
+    return resultado
+
+
+def inclinadas_de(detetor) -> dict[float, frozenset[str]]:
+    classes= getattr(detetor, "classes", None)
+    if classes is None:
+        return {}
+    por_inclinacao= {}
+    for nome, categoria in classes.categorias.items():
+        if categoria.inclinacao_panorama:
+            por_inclinacao.setdefault(categoria.inclinacao_panorama, set()).add(nome)
+    return {pitch: frozenset(nomes) for pitch, nomes in por_inclinacao.items()}
 
 
 def _anonima_em_disco(registo: ImageRecord, pasta_anon: Path) -> np.ndarray | None:
@@ -117,7 +146,8 @@ def processar(
     saida=sys.stderr,
     ao_progredir: Callable[[int, int], None] | None= None,
 ) -> tuple[dict[str, tuple[ImageRecord, list[Detection]]], list[str]]:
-    guardadas= checkpoint.load(ficheiro_checkpoint)
+    versao= getattr(detetor, "versao", None)
+    guardadas= checkpoint.load(ficheiro_checkpoint, versao)
     resultado= {}
     falhas= []
     inicio= time.time()
@@ -141,10 +171,10 @@ def processar(
             registo.caminho_anon= str(caminho_anon(pasta_anon, registo))
         registo.height, registo.width= anonima.shape[:2]
         if registo.camera_type == "spherical":
-            deteccoes= detect_panorama(detetor, registo.id, anonima)
+            deteccoes= detect_panorama(detetor, registo.id, anonima, inclinadas=inclinadas_de(detetor))
         else:
             deteccoes= detetor.detect(registo.id, anonima)
-        checkpoint.append(ficheiro_checkpoint, registo, deteccoes)
+        checkpoint.append(ficheiro_checkpoint, registo, deteccoes, versao)
         resultado[registo.id_fonte]= (registo, deteccoes)
         if n % PASSO_PROGRESSO == 0:
             ritmo= n / (time.time() - inicio)

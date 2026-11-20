@@ -1,11 +1,23 @@
+from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 from pipeline.anonymize.egoblur import save_anon
-from pipeline.detect.panorama import LADO_VISTA, detect_panorama, nms, views
+from pipeline.config import load_classes
+from pipeline.detect.panorama import (
+    LADO_VISTA,
+    deteccoes_inclinadas,
+    detect_panorama,
+    juntar_inclinadas,
+    nms,
+    views,
+    views_inclinadas,
+)
 from pipeline.geolocate.bearing import object_bearing
 from pipeline.models import Detection, ImageRecord
-from pipeline.run import processar
+from pipeline.run import inclinadas_de, processar
 
 LARGURA= 960
 ALTURA= 480
@@ -83,6 +95,70 @@ def test_sobreposicao_nao_duplica_deteccoes():
     deteccoes= detect_panorama(detetor, "mapillary:1", panorama)
     assert detetor.chamadas== 6
     assert len(deteccoes)== 1
+
+
+def test_o_centro_da_vista_inclinada_e_a_longitude_e_a_latitude_pedidas():
+    panorama= _panorama(0.0, 35.0)
+    yaw, vista= next(iter(views_inclinadas(panorama, 35.0)))
+    caixa= _caixa_do_marcador(vista)
+    assert yaw== 0.0
+    assert vista.shape== (LADO_VISTA, LADO_VISTA, 3)
+    assert abs((caixa[0] + caixa[2]) / 2 - LADO_VISTA / 2) < 12
+    assert abs((caixa[1] + caixa[3]) / 2 - LADO_VISTA / 2) < 12
+
+
+def test_marcador_a_60_graus_so_se_ve_nas_vistas_inclinadas():
+    panorama= _panorama(20.0, 60.0)
+    assert detect_panorama(DetetorDeMarcador(), "mapillary:1", panorama)== []
+    brutas= deteccoes_inclinadas(DetetorDeMarcador(), "mapillary:1", panorama, {35.0: frozenset({"sinal"})})
+    assert len(brutas) >= 1
+    erros= []
+    for deteccao in brutas:
+        x1, y1, x2, y2= deteccao.bbox_xyxy
+        rumo= object_bearing(0.0, (x1 + x2) / 2, LARGURA, 360.0)
+        erros.append(max(abs((rumo - 20.0 + 180) % 360 - 180), abs((0.5 - (y1 + y2) / 2 / ALTURA) * 180 - 60.0)))
+    assert min(erros) < 4.0
+
+
+def test_vistas_inclinadas_acrescentam_seis_chamadas_e_ignoram_categorias_nao_pedidas():
+    detetor= DetetorDeMarcador()
+    panorama= _panorama(20.0, 60.0)
+    detect_panorama(detetor, "mapillary:1", panorama, inclinadas={35.0: frozenset({"sinal"})})
+    assert detetor.chamadas== 12
+    assert deteccoes_inclinadas(DetetorDeMarcador(), "mapillary:1", panorama, {35.0: frozenset({"iluminacao"})})== []
+
+
+def _luz(caixa, confianca= 0.8, categoria= "iluminacao"):
+    return Detection("i", categoria, "luz", caixa, confianca, False)
+
+
+def test_juntar_inclinadas_acrescenta_so_caixas_grandes_e_sem_sobreposicao():
+    base= [_luz((100.0, 100.0, 140.0, 400.0))]
+    grande_livre= _luz((300.0, 50.0, 360.0, 400.0))
+    pequena= _luz((500.0, 100.0, 520.0, 160.0))
+    sobreposta= _luz((105.0, 50.0, 150.0, 300.0))
+    dentro= _luz((110.0, 150.0, 130.0, 350.0))
+    outra_categoria= _luz((100.0, 100.0, 140.0, 400.0), categoria= "sinal")
+    resultado= juntar_inclinadas(base, [grande_livre, pequena, sobreposta, dentro, outra_categoria], 960, 480)
+    assert resultado== base + [grande_livre, outra_categoria]
+
+
+def test_juntar_inclinadas_exige_confianca_minima():
+    base= []
+    fraca= _luz((300.0, 50.0, 360.0, 400.0), confianca= 0.4)
+    forte= _luz((600.0, 50.0, 660.0, 400.0), confianca= 0.6)
+    assert juntar_inclinadas(base, [fraca, forte], 960, 480)== [forte]
+
+
+def test_juntar_inclinadas_sem_inclinadas_devolve_a_base():
+    base= [_luz((100.0, 100.0, 140.0, 400.0))]
+    assert juntar_inclinadas(base, [], 960, 480)== base
+
+
+def test_a_iluminacao_pede_vistas_inclinadas_e_um_detetor_sem_classes_nao():
+    classes= load_classes(Path(__file__).parents[1] / "config" / "classes.yaml")
+    assert inclinadas_de(SimpleNamespace(classes=classes))== {35.0: frozenset({"iluminacao"})}
+    assert inclinadas_de(DetetorDeMarcador())== {}
 
 
 def test_nms_junta_caixas_na_costura():

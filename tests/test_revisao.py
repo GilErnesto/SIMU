@@ -189,6 +189,19 @@ def test_duplicados_so_perto_sem_rejeitados_e_com_fotos_em_comum(sessao):
 
 
 @precisa_bd
+def test_sinais_de_classes_diferentes_na_mesma_foto_nao_sao_duplicados(sessao):
+    analise= nova_analise(sessao)
+    imagens= {}
+    stop= criar_elemento(sessao, analise, 0, 0, ["f1"], categoria="sinal", classe="stop", imagens=imagens)
+    mesmo_poste= criar_elemento(sessao, analise, 0.3, 0, ["f1"], categoria="sinal", classe="informacao", imagens=imagens)
+    outro= criar_elemento(sessao, analise, 0, 1, ["f2"], categoria="sinal", classe="informacao", imagens=imagens)
+    igual= criar_elemento(sessao, analise, 1, 1, ["f1"], categoria="sinal", classe="stop", imagens=imagens)
+    pares= revisao.duplicados(sessao, analise.id, CRS, 4.0)
+    esperados= {(stop.id, outro.id), (stop.id, igual.id), (mesmo_poste.id, outro.id), (outro.id, igual.id)}
+    assert {(p["a"], p["b"]) for p in pares} == esperados
+
+
+@precisa_bd
 def test_api_juntar_separar_e_duplicados(cliente, sessao):
     analise= nova_analise(sessao)
     a= criar_elemento(sessao, analise, 0, 0, ["x", "y"])

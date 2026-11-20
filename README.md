@@ -2,7 +2,7 @@
 
 **Sistema de Identificação de Mobiliário Urbano.** Projeto do ATC Hackathon 2026 (Aveiro Tech City Hackathon), desafio 2, da Câmara Municipal de Aveiro e da Universidade de Aveiro.
 
-A aplicação deteta mobiliário urbano em imagens de rua (sinais de trânsito, candeeiros e postes de luz, contentores e ecopontos), calcula a posição de cada elemento, guarda-o num catálogo PostGIS, mostra-o num mapa onde um técnico o corrige, e exporta GeoJSON e CSV. Zona piloto: Rua da Pega, Bairro da Gulbenkian.
+A aplicação deteta mobiliário urbano em imagens de rua (sinais de trânsito, candeeiros e postes de luz, contentores e ecopontos), calcula a posição de cada elemento, guarda-o num catálogo PostGIS, mostra-o num mapa onde um técnico o corrige, e exporta GeoJSON e CSV. Zona piloto: Rua do ISCA até à Av. Dr. Mário Sacramento, em Aveiro.
 
 - Entrada: fotografias com GPS, vídeos com GPX, ou uma zona do Mapillary.
 - Privacidade: rostos e matrículas são desfocados (EgoBlur) antes de qualquer imagem ser gravada.
@@ -44,10 +44,10 @@ Abrir `http://localhost:8080`. A API fica em `http://localhost:8010` (documenta�
 
 | | Tempo por imagem |
 |---|---|
-| GPU (RTX 4060 laptop) | cerca de 0,5 s por fotografia, 0,75 s por panorama |
+| GPU (RTX 4060 laptop) | cerca de 0,5 s por fotografia; a zona piloto (231 imagens, 183 panoramas) demora cerca de 6,3 minutos, com duas passagens do EgoBlur e, nos panoramas, vistas inclinadas para a iluminação |
 | CPU (4 núcleos) | 15 a 30 s, quase tudo na anonimização |
 
-O CPU serve para poucas fotografias. Na GPU o EgoBlur corre em meia precisão com o limiar de rostos e matrículas 0,05 mais baixo: desfoca um pouco mais, nunca menos. A imagem do worker com GPU tem cerca de 11 GB; o primeiro build demora uns minutos, os seguintes só segundos se mudar apenas o código. `WORKER_CPUS` e `WORKER_MEM` no `.env` limitam o worker.
+Desde 20/11 o EgoBlur corre duas passagens (a segunda sobre a imagem já desfocada, para apanhar o que a primeira deixou escapar): cerca de 0,3 s a mais por imagem na GPU (medido) e o dobro do tempo no CPU, por isso os tempos desta tabela são anteriores. O CPU serve para poucas fotografias. Na GPU o EgoBlur corre em meia precisão com o limiar de rostos e matrículas 0,05 mais baixo: desfoca um pouco mais, nunca menos. A imagem do worker com GPU tem cerca de 11 GB; o primeiro build demora uns minutos, os seguintes só segundos se mudar apenas o código. `WORKER_CPUS` e `WORKER_MEM` no `.env` limitam o worker.
 
 ## Usar a interface
 
@@ -98,7 +98,7 @@ A interface fica em `http://localhost:5173` e fala com a API pelo prefixo `/api`
 ### Pipeline do Mapillary
 
 ```bash
-python -m pipeline.run --bbox -8.6625,40.6291,-8.6581,40.6382
+python -m pipeline.run --bbox -8.653933,40.630337,-8.648515,40.632975
 ```
 
 `--bbox` é `lon_min,lat_min,lon_max,lat_max` (longitude primeiro) e dispensa criar um `.yaml`: usa o município e o CRS de `config/municipio.yaml`. Sem `--bbox` usa a bbox desse ficheiro. Também existe em `pipeline.bancada` e `pipeline.referencia`.
@@ -111,6 +111,9 @@ Aparece como uma análise por zona. Imagens já registadas são ignoradas. Opç�
 - `PATCH /elementos/{id}`: corrige classe, posição ou estado. Cada alteração fica em `correcao`; nunca se apaga um elemento.
 - `GET /export.geojson` e `GET /export.csv`.
 - `POST /analises`, `GET /analises`, `GET /analises/{token}`, `DELETE /analises/{token}`.
+- `POST /analises/zona`: analisa uma zona do Mapillary (`{bbox: [lon_min, lat_min, lon_max, lat_max], nome}`, no máximo 0,02° de lado). O worker recusa zonas com mais de `MAX_IMAGENS_ZONA` imagens (1500 por omissão) com a mensagem "A zona tem N imagens, mais do que o máximo...", porque uma análise em curso não se cancela e uma zona densa (o centro de Aveiro tem 1669 imagens numa área de 250 por 220 m) ocuparia o worker cerca de 45 minutos. Um vídeo que gere mais de `MAX_IMAGENS_VIDEO` imagens (1500 por omissão, ou seja 12,5 minutos a 2 imagens por segundo) falha logo, em segundos, com o número de imagens e a sugestão de reduzir as imagens por segundo ou cortar o vídeo.
+- `GET /analises/{token}/duplicados`: pares da mesma categoria a menos de 4 m (`raio` muda a distância).
+- `POST /elementos/{id}/juntar` (`{origem, autor}`) e `POST /elementos/{id}/separar` (`{observacoes, autor}`): revisão manual, sempre registada em `correcao`.
 - `GET /imagens/{id}`: só serve ficheiros de `ANON_DIR`.
 
 ## Testes
@@ -152,7 +155,7 @@ python -m training.tipos treinar --saida data/datasets/correcoes_iluminacao --ca
 ```
 
 - Entram elementos `validado` (com a classe do elemento), `corrigido` com a classe alterada, e `rejeitado` (como `nao_luz`, só na iluminação). Elementos só com a posição corrigida não confirmam a classe.
-- Os recortes saem de `data/anon` (já anonimizada). Os panoramas ficam de fora: o classificador vê vistas retilíneas, não a imagem esférica.
+- Os recortes saem de `data/anon` (já anonimizada). Nos panoramas o recorte sai da vista retilínea de 90° onde a caixa aparece maior, porque é assim que o classificador vê a imagem; caixas fora das vistas (perto do zénite) ficam de fora.
 - `--analise <código>` (repetível) limita a análises escolhidas. `--referencia` grava as posições indicadas pelo técnico, para medir a localização.
 - Se `models/tipo_iluminacao.npz` existir, o pipeline passa a usá-lo.
 - Cuidado: quem só valida o que o detetor achou não gera falsos negativos, e fotografias vizinhas dão uma validação otimista.
@@ -181,9 +184,11 @@ python -m pipeline.bancada --fonte mapillary --municipio config/avaliacao/rossio
 ## Limitações conhecidas
 
 - Sem autenticação: o nome do técnico é texto livre.
-- Candeeiro ornamental contra poste de luz ainda é fraco (7 de 12 candeeiros certos); papeleiras também (recall de 19%).
+- Candeeiro contra poste de luz: só se distingue bem na zona onde a cabeça foi treinada; noutras zonas cerca de 8 a 11% dos postes de luz passam por candeeiro (números em `docs/avaliacao.md`). Candeeiros pequenos e longe, como os de um vídeo gravado do outro lado da estrada, não se distinguem. Papeleiras também são fracas (recall de 19%).
+- A câmara, ou uma cena parecida com um poste, pode aparecer como luz: o detetor não os distingue e o técnico rejeita-os em Avaliar.
+- Nos vídeos só se contam luzes a menos de 30 m da câmara (`alcance_max_m` em `config/classes.yaml`): as do outro lado de uma rua larga ficam de fora.
 - A distância monocular usa só a altura típica da categoria; o Depth Anything não está integrado.
-- O campo de visão das imagens em perspetiva é fixo (65°, em `pipeline/geolocate/bearing.py`).
+- O campo de visão das imagens em perspetiva é de 65° no lado maior da imagem (em `pipeline/geolocate/bearing.py`); a distância focal do EXIF não é lida.
 - Elementos sem posição (fotografias sem GPS, vídeos sem GPX) não se juntam entre imagens: aparecem repetidos.
 - O Mapillary limita cada pedido a 2000 imagens: com bbox grande, algumas podem ficar de fora. O KartaView não está implementado.
 - A referência de avaliação é automática (Mapillary), não anotada por pessoas.

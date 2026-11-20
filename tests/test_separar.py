@@ -142,3 +142,15 @@ def test_fusao_em_cadeia_respeita_as_fotos_acumuladas():
     grupos= [grupo((0.0, 0.0), [0]), grupo((1.5, 0.0), [1]), grupo((3.0, 0.0), [2])]
     resultado= fundir_proximos(grupos, observacoes, 4.0)
     assert len(resultado) == 2
+
+
+def test_caixa_sem_posicao_possivel_nao_vira_elemento_no_centro_do_grupo():
+    observacoes= [
+        obs("a", (0.0, 0.0), POSTE_A, (100, 50, 140, 300)),
+        obs("a", (0.0, 0.0), (0.0, 400.0), (700, 300, 712, 330)),
+    ]
+    origens= [(0.0, 0.0), (0.0, 0.0)]
+    grupos= separar_mesma_imagem(membros_fundidos(2), observacoes, origens, {"luz"}, monocular_com_erro, 6.0)
+    assert len(grupos) == 1
+    assert grupos[0][0][1] == {0}
+    assert math.dist(grupos[0][0][0], POSTE_A) < 3.0

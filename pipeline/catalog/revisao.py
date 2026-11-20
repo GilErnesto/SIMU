@@ -148,6 +148,8 @@ def duplicados(sessao: Session, analise_id: int, crs_metrico: str, raio_m: float
         for i, j in cKDTree(coordenadas).query_pairs(raio_m):
             a, b= sorted((itens[i], itens[j]), key=lambda item: item[0])
             distancia= float(np.hypot(*(np.array(a[2]) - np.array(b[2]))))
+            if categoria == "sinal" and a[1] != b[1] and imagens[a[0]] & imagens[b[0]]:
+                continue
             pares.append(
                 {
                     "a": a[0],

@@ -100,7 +100,7 @@ export default function ListaElementos({
                   <span className="item__texto">
                     <span className="item__nome">{rotuloClasse(config, p.categoria, p.classe)}</span>
                     <span className="item__meta">
-                      {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}
+                      n.º {p.id}, {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}
                       {p.obstruido ? ", tapado" : ""}
                       {feature.geometry ? "" : ", sem posição"}
                     </span>

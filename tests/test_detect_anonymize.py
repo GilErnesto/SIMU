@@ -58,6 +58,46 @@ def test_anonimizador_desfoca_so_dentro_da_caixa():
     assert saida is not imagem
 
 
+class DetetorQueSoVeNaSegundaPassagem:
+    def __init__(self):
+        self.chamadas= 0
+
+    def __call__(self, imagem):
+        self.chamadas+= 1
+        return np.array([[20, 20, 60, 60]]) if self.chamadas >= 2 else np.empty((0, 4))
+
+
+def test_o_que_escapa_a_primeira_passagem_e_desfocado_na_segunda():
+    rng= np.random.default_rng(1)
+    imagem= rng.integers(0, 255, (100, 100, 3), dtype=np.uint8)
+    detetor= DetetorQueSoVeNaSegundaPassagem()
+    saida= Anonymizer([detetor])(imagem)
+    assert detetor.chamadas == 2
+    assert saida[20:60, 20:60].std() < imagem[20:60, 20:60].std()
+    assert np.array_equal(saida[:, 70:], imagem[:, 70:])
+
+
+def test_uma_so_passagem_deixa_escapar_o_que_so_a_segunda_ve():
+    rng= np.random.default_rng(1)
+    imagem= rng.integers(0, 255, (100, 100, 3), dtype=np.uint8)
+    saida= Anonymizer([DetetorQueSoVeNaSegundaPassagem()], passagens=1)(imagem)
+    assert np.array_equal(saida, imagem)
+
+
+def test_a_segunda_passagem_corre_sobre_a_imagem_ja_desfocada():
+    rng= np.random.default_rng(2)
+    imagem= rng.integers(0, 255, (100, 100, 3), dtype=np.uint8)
+    vistas= []
+
+    def detetor(entrada):
+        vistas.append(entrada.copy())
+        return np.array([[20, 20, 60, 60]])
+
+    Anonymizer([detetor])(imagem)
+    assert np.array_equal(vistas[0], imagem)
+    assert vistas[1][20:60, 20:60].std() < imagem[20:60, 20:60].std()
+
+
 def test_caixa_fora_da_imagem_nao_falha():
     imagem= np.zeros((50, 50, 3), dtype=np.uint8)
     saida= Anonymizer([lambda _: np.array([[-10, -10, 200, 200], [60, 60, 70, 70]])])(imagem)

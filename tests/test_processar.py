@@ -135,6 +135,37 @@ def test_checkpoint_inexistente(tmp_path):
     assert checkpoint.load(tmp_path / "nada.jsonl") == {}
 
 
+def test_checkpoint_so_devolve_a_versao_pedida(tmp_path):
+    ficheiro= tmp_path / "cp.jsonl"
+    checkpoint.append(ficheiro, _registo("velha"), [], "v1")
+    checkpoint.append(ficheiro, _registo("nova"), [], "v2")
+    checkpoint.append(ficheiro, _registo("sem_versao"), [])
+    assert sorted(checkpoint.load(ficheiro)) == ["nova", "sem_versao", "velha"]
+    assert list(checkpoint.load(ficheiro, "v2")) == ["nova"]
+    assert list(checkpoint.load(ficheiro, "v1")) == ["velha"]
+
+
+def test_versao_nova_do_detetor_volta_a_detetar_sem_descarregar(tmp_path):
+    imagens= [_registo("a")]
+    primeiro= DetetorFalso()
+    primeiro.versao= "v1"
+    _executar(tmp_path, imagens, _baixar_com_falha, detetor=primeiro)
+    igual= DetetorFalso()
+    igual.versao= "v1"
+    _executar(tmp_path, imagens, _nunca, detetor=igual)
+    assert igual.vistas == []
+    outro= DetetorFalso()
+    outro.versao= "v2"
+    resultado, _, anonimizador, _= _executar(tmp_path, imagens, _nunca, detetor=outro)
+    assert outro.vistas == ["mapillary:a"]
+    assert anonimizador.chamadas == 0
+    assert list(resultado) == ["a"]
+    voltar= DetetorFalso()
+    voltar.versao= "v2"
+    _executar(tmp_path, imagens, _nunca, detetor=voltar)
+    assert voltar.vistas == []
+
+
 class Resposta:
     def __init__(self, conteudo=b"", erro=None):
         self.content= conteudo

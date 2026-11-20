@@ -4,14 +4,16 @@ FOV_PADRAO= 65.0
 FOV_VERTICAL_ESFERICA= 180.0
 
 
-def horizontal_fov(camera_type: str) -> float:
-    return 360.0 if camera_type == "spherical" else FOV_PADRAO
+def horizontal_fov(camera_type: str, width: int, height: int) -> float:
+    if camera_type == "spherical":
+        return 360.0
+    return FOV_PADRAO * width / height if height > width else FOV_PADRAO
 
 
 def vertical_fov(camera_type: str, width: int, height: int) -> float:
     if camera_type == "spherical":
         return FOV_VERTICAL_ESFERICA
-    return FOV_PADRAO * height / width
+    return FOV_PADRAO if height > width else FOV_PADRAO * height / width
 
 
 def object_bearing(heading: float, x_center: float, width: int, fov: float) -> float:

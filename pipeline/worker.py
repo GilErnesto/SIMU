@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import sys
 import time
@@ -54,6 +55,16 @@ def _gravar(
     analises.concluir(sessao, analise, analise.n_elementos, avisos)
 
 
+MAX_IMAGENS_ZONA= 1500
+
+
+def _limite_zona() -> int:
+    try:
+        return int(os.environ.get("MAX_IMAGENS_ZONA", MAX_IMAGENS_ZONA))
+    except ValueError:
+        return MAX_IMAGENS_ZONA
+
+
 def _processar_zona(
     sessao: Session,
     analise: Analise,
@@ -81,6 +92,14 @@ def _processar_zona(
         if not novas:
             erro= "A imagem desta zona já está noutra análise" if len(listadas) == 1 else f"As {len(listadas)} imagens desta zona já estão noutra análise"
             analises.falhar(sessao, analise, erro)
+            return False
+        limite= _limite_zona()
+        if len(novas) > limite:
+            analises.falhar(
+                sessao,
+                analise,
+                f"A zona tem {len(novas)} imagens, mais do que o máximo de {limite} por análise. Escolha uma zona mais pequena.",
+            )
             return False
         repetidas= len(listadas) - len(novas)
         if repetidas:
@@ -125,12 +144,11 @@ def processar_analise(
         registos, novos_avisos= uploads.carregar(pasta, analise.token, analise.parametros or {})
         avisos.extend(novos_avisos)
         if not registos:
-            analises.falhar(
-                sessao,
-                analise,
-                "Nenhuma imagem utilizável: não há fotografias nem vídeos que se consigam ler",
-                avisos,
+            motivo= next(
+                (a for a in novos_avisos if "mais do que o máximo" in a),
+                "não há fotografias nem vídeos que se consigam ler",
             )
+            analises.falhar(sessao, analise, f"Nenhuma imagem utilizável: {motivo}", avisos)
             return False
         analises.registar_progresso(sessao, analise, 0, len(registos))
         feitas, falhas= processar(

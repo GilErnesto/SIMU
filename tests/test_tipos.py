@@ -102,6 +102,28 @@ def test_treinar_tipos_guarda_a_cabeca_e_compara_com_o_zero_shot(tmp_path):
     assert isinstance(Cabeca.carregar(destino), Cabeca)
 
 
+def test_a_regularizacao_depende_da_categoria_e_chega_ao_treino(tmp_path, monkeypatch):
+    chamadas= []
+    original= tipos.treinar
+
+    def espia(embeddings, etiquetas, regularizacao= 1.0):
+        chamadas.append(regularizacao)
+        return original(embeddings, etiquetas, regularizacao)
+
+    monkeypatch.setattr(tipos, "treinar", espia)
+    saida= tmp_path / "tipos"
+    for divisao in ("train", "val"):
+        for classe, valor in (("stop", 1.0), ("cedencia", -1.0)):
+            pasta= saida / "recortes" / divisao / classe
+            pasta.mkdir(parents=True)
+            for n in range(tipos.MINIMO_POR_CLASSE):
+                cv2.imwrite(str(pasta / f"{n}.jpg"), np.full((20, 20, 3), 127 + int(valor * 100), np.uint8))
+    incorporar= lambda recortes: np.array([[float(r.mean()) / 255, 1.0] for r in recortes])
+    tipos.treinar_tipos(saida, incorporar, lambda f: ["stop"] * len(f), tmp_path / "c.npz", tipos.REGULARIZACAO["sinal"])
+    assert chamadas == [30.0, 30.0]
+    assert tipos.REGULARIZACAO == {"sinal": 30.0, "iluminacao": 10.0}
+
+
 def test_treinar_tipos_com_poucos_exemplos(tmp_path):
     _escrever_recortes(tmp_path, "train", "stop", 3, 100)
     with pytest.raises(ErroPipeline, match="Poucos exemplos"):

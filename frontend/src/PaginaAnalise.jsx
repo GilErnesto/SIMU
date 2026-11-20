@@ -20,6 +20,7 @@ import { FILTROS_VAZIOS, contarFiltros } from "./Filtros.jsx";
 import Fotos from "./Fotos.jsx";
 import Lateral from "./Lateral.jsx";
 import Mapa from "./Mapa.jsx";
+import Marca from "./Marca.jsx";
 import MenuExportar from "./MenuExportar.jsx";
 import ProgressoDaAnalise from "./ProgressoDaAnalise.jsx";
 import { Ligacao } from "./rota.js";
@@ -88,7 +89,7 @@ export default function PaginaAnalise({ token }) {
   const [ampliar, setAmpliar]= useState(null);
   const [filtrosAbertos, setFiltrosAbertos]= useState(false);
   const [avaliar, setAvaliar]= useState(false);
-  const [tecnico, setTecnico]= useState(() => ler("tecnico", ""));
+  const [tecnico]= useState(() => ler("tecnico", ""));
   const [modoMover, setModoMover]= useState(false);
   const [candidata, setCandidata]= useState(null);
   const [tentativaAnalise, setTentativaAnalise]= useState(0);
@@ -318,11 +319,6 @@ export default function PaginaAnalise({ token }) {
     setFiltros((atuais) => ({ ...atuais, ...alteracao }));
   }
 
-  function mudarTecnico(valor) {
-    setTecnico(valor);
-    guardar("tecnico", valor);
-  }
-
   function mudarDivisao(valor) {
     setFotosPct(valor);
     guardar("simu.fotos", String(valor));
@@ -360,9 +356,7 @@ export default function PaginaAnalise({ token }) {
 
   const cabecalho= (
     <header className="cabecalho">
-      <Ligacao para="/" className="marca">
-        SIMU
-      </Ligacao>
+      <Marca />
       {analise && (
         <div className="cabecalho__titulo">
           <h1>{analise.nome}</h1>
@@ -543,7 +537,6 @@ export default function PaginaAnalise({ token }) {
                   detalhe={detalhe}
                   aoRepetir={() => setTentativaDetalhe((n) => n + 1)}
                   tecnico={tecnico}
-                  aoMudarTecnico={mudarTecnico}
                   aoSeparar={separar}
                   aoAmpliar={(indice) => setAmpliar({ indice })}
                 />

@@ -17,6 +17,9 @@
 }
 
 .marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espaco-2);
   font-size: 1.0625rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -27,6 +30,18 @@
 .marca:hover {
   color: var(--acento-escuro);
   text-decoration: underline;
+}
+
+.marca__logo {
+  display: block;
+  height: 2.75rem;
+  width: auto;
+}
+
+@media (min-width: 700px) {
+  .marca__logo {
+    height: 3.5rem;
+  }
 }
 
 .cabecalho__titulo {
