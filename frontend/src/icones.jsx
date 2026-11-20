@@ -67,14 +67,6 @@ export function IconeExportar(props) {
   );
 }
 
-export function IconeLista(props) {
-  return (
-    <Icone {...props}>
-      <path d="M8.5 7h11M8.5 12h11M8.5 17h11M4.5 7v.1M4.5 12v.1M4.5 17v.1" />
-    </Icone>
-  );
-}
-
 export function IconeDuplicados(props) {
   return (
     <Icone {...props}>
@@ -88,14 +80,6 @@ export function IconeFechar(props) {
   return (
     <Icone {...props}>
       <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
-    </Icone>
-  );
-}
-
-export function IconeAmpliar(props) {
-  return (
-    <Icone {...props}>
-      <path d="M14 5h5v5M10 19H5v-5M19 5l-6 6M5 19l6-6" />
     </Icone>
   );
 }

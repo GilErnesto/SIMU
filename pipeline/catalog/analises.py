@@ -6,8 +6,6 @@ from sqlalchemy.orm import Session
 
 from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao
 
-ESTADOS= ("na_fila", "a_processar", "concluida", "falhou")
-
 
 def novo_token() -> str:
     return secrets.token_urlsafe(6)
