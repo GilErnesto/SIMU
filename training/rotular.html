@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rotular luzes</title>
+<title>Rotular</title>
 <style>
 :root {
   --papel: #f4f3ee;
@@ -18,6 +18,11 @@
   --candeeiro: #c2410c;
   --nao_luz: #b42318;
   --poste_eletrico: #6d28d9;
+  --ilha_reciclagem: #047857;
+  --indiferenciado: #c2410c;
+  --papeleira: #1d4ed8;
+  --subterraneo: #6d28d9;
+  --nao_residuo: #b42318;
   --pendente: #9d00b8;
 }
 * { box-sizing: border-box; }
@@ -96,6 +101,11 @@ main {
 .caixa.candeeiro { border-color: var(--candeeiro); }
 .caixa.nao_luz { border-color: var(--nao_luz); border-style: dashed; }
 .caixa.poste_eletrico { border-color: var(--poste_eletrico); }
+.caixa.ilha_reciclagem { border-color: var(--ilha_reciclagem); }
+.caixa.indiferenciado { border-color: var(--indiferenciado); }
+.caixa.papeleira { border-color: var(--papeleira); }
+.caixa.subterraneo { border-color: var(--subterraneo); }
+.caixa.nao_residuo { border-color: var(--nao_residuo); border-style: dashed; }
 #recorte { display: block; width: 100%; height: auto; max-height: 220px; object-fit: contain; background: #222; }
 .opcao { display: flex; gap: 8px; align-items: center; min-height: 44px; margin-top: 6px; }
 .opcao input { width: 20px; height: 20px; }
@@ -131,7 +141,7 @@ aside h2 { font-size: 15px; margin: 0 0 8px; }
 </head>
 <body>
 <header>
-  <h1>Rotular luzes</h1>
+  <h1 id="titulo">Rotular</h1>
   <label>Lote <select id="lote"></select></label>
   <span id="progresso" role="status"></span>
   <span id="aviso" role="status" aria-live="polite"></span>
@@ -147,7 +157,7 @@ aside h2 { font-size: 15px; margin: 0 0 8px; }
       <canvas id="recorte" width="1" height="1" role="img" aria-label="Recorte ampliado da caixa selecionada"></canvas>
       <p class="nota" id="nota-recorte"></p>
       <label class="opcao"><input type="checkbox" id="todas"> Mostrar todas as caixas <kbd>T</kbd></label>
-      <label class="opcao"><input type="checkbox" id="auto" checked> Pré-classificar como poste de luz as caixas com confiança de 0,5 ou mais</label>
+      <label class="opcao"><input type="checkbox" id="auto" checked> <span id="texto-auto">Pré-classificar as caixas com confiança de 0,5 ou mais</span></label>
     </section>
     <section>
       <h2>Caixa selecionada</h2>
@@ -158,16 +168,16 @@ aside h2 { font-size: 15px; margin: 0 0 8px; }
     <section>
       <h2>Caixas da imagem</h2>
       <ol id="lista"></ol>
-      <p class="nota" id="vazia" hidden>Sem caixas. Arrasta na fotografia para desenhar uma luz em falta.</p>
+      <p class="nota" id="vazia" hidden>Sem caixas. Arrasta na fotografia para desenhar uma caixa em falta.</p>
     </section>
     <section>
       <button id="gravar" class="primario" type="button">Gravar e seguir <kbd>Enter</kbd></button>
-      <p class="nota">Cada imagem mostra só luzes. Rejeitar uma caixa do modelo é classificá-la como "Não é luz".</p>
+      <p class="nota" id="nota-gravar"></p>
     </section>
     <section>
       <h2>Atalhos</h2>
       <dl class="atalhos">
-        <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Classe da caixa</dd>
+        <dt id="teclas-classes"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Classe da caixa</dd>
         <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Caixa anterior ou seguinte</dd>
         <dt><kbd>Enter</kbd></dt><dd>Gravar e seguir</dd>
         <dt><kbd>B</kbd></dt><dd>Imagem anterior</dd>
@@ -180,13 +190,10 @@ aside h2 { font-size: 15px; margin: 0 0 8px; }
   </aside>
 </main>
 <script>
-const CLASSES= [
-  { id: "poste_luz", nome: "Poste de luz", tecla: "1" },
-  { id: "candeeiro", nome: "Candeeiro", tecla: "2" },
-  { id: "nao_luz", nome: "Não é luz", tecla: "3" },
-  { id: "poste_eletrico", nome: "Poste elétrico", tecla: "4" },
-];
-const NOME= Object.fromEntries(CLASSES.map((c) => [c.id, c.nome]));
+// Classes, títulos e textos vêm de /api/config (categoria escolhida no servidor).
+let CONFIG= null;
+let CLASSES= [];
+let NOME= {};
 const ZOOMS= [1, 1.5, 2, 3, 4, 6];
 const LADO_MIN= 6;
 const MARGEM_RECORTE= 0.15;
@@ -380,6 +387,28 @@ function mudarZoom(passo) {
   aplicarZoom();
 }
 
+// Classe proposta para uma deteção do modelo: a fixa da categoria (luzes) ou,
+// se não houver, a classe que o detetor deu, quando é uma das classes a rotular.
+function classeSugerida(d) {
+  if (CONFIG.sugerida) return CONFIG.sugerida;
+  return d.classe && NOME[d.classe] && d.classe !== CONFIG.negativa ? d.classe : null;
+}
+
+function aplicarConfig(config) {
+  CONFIG= config;
+  CLASSES= config.classes.map((c, i) => ({ ...c, tecla: String(i + 1) }));
+  NOME= Object.fromEntries(CLASSES.map((c) => [c.id, c.nome]));
+  document.title= config.titulo;
+  el("titulo").textContent= config.titulo;
+  const negativa= NOME[config.negativa];
+  el("nota-gravar").textContent=
+    `Cada imagem mostra só caixas de ${config.elemento}. Rejeitar uma caixa do modelo é classificá-la como "${negativa}".`;
+  el("texto-auto").textContent= config.sugerida
+    ? `Pré-classificar como "${NOME[config.sugerida]}" as caixas com confiança de 0,5 ou mais`
+    : "Pré-classificar com a classe do modelo as caixas com confiança de 0,5 ou mais";
+  el("teclas-classes").innerHTML= CLASSES.map((c) => `<kbd>${c.tecla}</kbd>`).join(" ");
+}
+
 async function carregarImagem() {
   const item= estado.fila[estado.pos];
   if (!item) {
@@ -394,8 +423,8 @@ async function carregarImagem() {
     const base= dados.caixas
       ? dados.caixas.map((c) => ({ ...c }))
       : dados.deteccoes.map((d) => {
-          const sugerida= preencher && d.confianca >= LIMIAR_AUTO;
-          return { bbox: d.bbox, classe: sugerida ? "poste_luz" : null, auto: sugerida, origem: "modelo", confianca: d.confianca };
+          const classe= preencher && d.confianca >= LIMIAR_AUTO ? classeSugerida(d) : null;
+          return { bbox: d.bbox, classe, auto: classe !== null, origem: "modelo", confianca: d.confianca };
         });
     base.forEach((c) => {
       if (c.origem === "modelo" && c.confianca === undefined) {
@@ -575,6 +604,12 @@ async function abrirLote(lote) {
 }
 
 async function iniciar() {
+  try {
+    aplicarConfig(await pedir("/api/config"));
+  } catch (erro) {
+    mostrarEstado(`Erro ao ler a configuração: ${erro.message}`, true);
+    return;
+  }
   CLASSES.forEach((c) => {
     const botao= document.createElement("button");
     botao.type= "button";

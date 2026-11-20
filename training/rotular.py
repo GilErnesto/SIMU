@@ -9,10 +9,40 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 BASE= Path(os.environ.get("AVALIACAO_DIR", "data/avaliacao"))
-CATEGORIA= "iluminacao"
+# Categoria a rotular: ROTULAR_CATEGORIA=residuos uvicorn training.rotular:app
+ROTULAR= {
+    "iluminacao": {
+        "titulo": "Rotular luzes",
+        "elemento": "luz",
+        "classes": {
+            "poste_luz": "Poste de luz",
+            "candeeiro": "Candeeiro",
+            "nao_luz": "Não é luz",
+            "poste_eletrico": "Poste elétrico",
+        },
+        "sugerida": "poste_luz",
+        "negativa": "nao_luz",
+    },
+    "residuos": {
+        "titulo": "Rotular resíduos",
+        "elemento": "contentor",
+        "classes": {
+            "ilha_reciclagem": "Ilha de reciclagem",
+            "indiferenciado": "Indiferenciados",
+            "papeleira": "Papeleira",
+            "subterraneo": "Subterrâneo",
+            "nao_residuo": "Não é resíduo",
+        },
+        "sugerida": None,
+        "negativa": "nao_residuo",
+    },
+}
+CATEGORIA= os.environ.get("ROTULAR_CATEGORIA", "iluminacao")
+if CATEGORIA not in ROTULAR:
+    raise RuntimeError(f"ROTULAR_CATEGORIA desconhecida: {CATEGORIA} (opções: {', '.join(ROTULAR)})")
 CONFIANCA_MIN= 0.3
 INCERTEZA_MAX= 0.6
 MAX_CAIXAS= 200
@@ -22,14 +52,25 @@ LOTE_RE= re.compile(r"^[a-z0-9_]+$")
 ID_RE= re.compile(r"^[0-9]+$")
 trinco= threading.Lock()
 
-app= FastAPI(title="Rotular luzes")
+app= FastAPI(title="Rotular")
+
+
+def classes_ativas() -> dict[str, str]:
+    return ROTULAR[CATEGORIA]["classes"]
 
 
 class Caixa(BaseModel):
     bbox: list[float] = Field(min_length=4, max_length=4)
-    classe: Literal["poste_luz", "candeeiro", "nao_luz", "poste_eletrico"]
+    classe: str
     origem: Literal["modelo", "manual"]
     auto: bool= False
+
+    @field_validator("classe")
+    @classmethod
+    def classe_da_categoria(cls, valor: str) -> str:
+        if valor not in classes_ativas():
+            raise ValueError(f"classe desconhecida para {CATEGORIA}: {valor}")
+        return valor
 
 
 class Rotulos(BaseModel):
@@ -70,7 +111,7 @@ def ler_deteccoes(lote: str) -> dict[str, dict]:
             except (ValueError, KeyError, TypeError):
                 continue
             luzes= [
-                {"bbox": d["bbox_xyxy"], "confianca": d["confidence"]}
+                {"bbox": d["bbox_xyxy"], "confianca": d["confidence"], "classe": d.get("class_name")}
                 for d in registo.get("deteccoes", [])
                 if d.get("category") == CATEGORIA and d.get("confidence", 0) >= CONFIANCA_MIN
             ]
@@ -126,6 +167,19 @@ def construir_fila(imagens: dict[str, dict]) -> list[dict]:
 @app.get("/favicon.ico", include_in_schema=False)
 def icone():
     return Response(status_code=204)
+
+
+@app.get("/api/config")
+def configuracao():
+    dados= ROTULAR[CATEGORIA]
+    return {
+        "categoria": CATEGORIA,
+        "titulo": dados["titulo"],
+        "elemento": dados["elemento"],
+        "classes": [{"id": i, "nome": nome} for i, nome in dados["classes"].items()],
+        "sugerida": dados["sugerida"],
+        "negativa": dados["negativa"],
+    }
 
 
 @app.get("/")
@@ -193,6 +247,7 @@ def gravar(lote: str, id_fonte: str, pedido: Rotulos):
     origem= next((i["origem"] for i in construir_fila(imagens) if i["id"] == id_fonte), "aleatoria")
     registo= {
         "id": id_fonte,
+        "categoria": CATEGORIA,
         "origem": origem,
         "camera_type": dados["camera_type"],
         "width": largura,

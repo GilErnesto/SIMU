@@ -90,3 +90,62 @@ def test_marca_auto_e_guardada_e_por_omissao_falsa(cliente):
     cliente.post("/api/lotes/lote_a/imagens/1", json=corpo)
     guardadas= cliente.get("/api/lotes/lote_a/imagens/1").json()["caixas"]
     assert [c["auto"] for c in guardadas] == [True, False]
+
+
+def linha_residuos(id_fonte: str) -> str:
+    return json.dumps(
+        {
+            "imagem": {"id_fonte": id_fonte, "width": 1000, "height": 500, "camera_type": "perspective", "lat": 40.6, "lon": -8.6},
+            "deteccoes": [
+                {"category": "residuos", "class_name": "ilha_reciclagem", "bbox_xyxy": [10, 20, 90, 200], "confidence": 0.8},
+                {"category": "iluminacao", "class_name": "luz", "bbox_xyxy": [300, 20, 330, 200], "confidence": 0.9},
+            ],
+        }
+    )
+
+
+@pytest.fixture
+def cliente_residuos(tmp_path, monkeypatch):
+    (tmp_path / "lote_r").mkdir()
+    (tmp_path / "imagens").mkdir()
+    (tmp_path / "lote_r" / "deteccoes.jsonl").write_text(linha_residuos("1"), encoding="utf-8")
+    (tmp_path / "imagens" / "mapillary_1.jpg").write_bytes(b"jpg")
+    monkeypatch.setattr(rotular, "BASE", tmp_path)
+    monkeypatch.setattr(rotular, "CATEGORIA", "residuos")
+    return TestClient(rotular.app)
+
+
+def test_config_por_omissao_e_a_iluminacao(cliente):
+    config= cliente.get("/api/config").json()
+    assert config["categoria"] == "iluminacao"
+    assert config["sugerida"] == "poste_luz"
+    assert [c["id"] for c in config["classes"]] == ["poste_luz", "candeeiro", "nao_luz", "poste_eletrico"]
+
+
+def test_config_dos_residuos(cliente_residuos):
+    config= cliente_residuos.get("/api/config").json()
+    assert config["categoria"] == "residuos"
+    assert config["negativa"] == "nao_residuo"
+    assert config["sugerida"] is None
+    assert "ilha_reciclagem" in [c["id"] for c in config["classes"]]
+
+
+def test_residuos_so_mostra_deteccoes_de_residuos_com_a_classe(cliente_residuos):
+    dados= cliente_residuos.get("/api/lotes/lote_r/imagens/1").json()
+    assert dados["deteccoes"] == [{"bbox": [10, 20, 90, 200], "confianca": 0.8, "classe": "ilha_reciclagem"}]
+
+
+def test_residuos_aceita_as_suas_classes_e_grava_a_categoria(cliente_residuos, tmp_path):
+    corpo= {"caixas": [
+        {"bbox": [10, 20, 90, 200], "classe": "ilha_reciclagem", "origem": "modelo"},
+        {"bbox": [400, 20, 450, 200], "classe": "nao_residuo", "origem": "manual"},
+    ]}
+    assert cliente_residuos.post("/api/lotes/lote_r/imagens/1", json=corpo).status_code == 200
+    registo= json.loads((tmp_path / "rotulos" / "lote_r.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert registo["categoria"] == "residuos"
+    assert [c["classe"] for c in registo["caixas"]] == ["ilha_reciclagem", "nao_residuo"]
+
+
+def test_residuos_recusa_classes_de_luz(cliente_residuos):
+    corpo= {"caixas": [{"bbox": [10, 20, 90, 200], "classe": "poste_luz", "origem": "manual"}]}
+    assert cliente_residuos.post("/api/lotes/lote_r/imagens/1", json=corpo).status_code == 422

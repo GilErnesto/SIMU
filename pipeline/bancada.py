@@ -21,7 +21,8 @@ from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.models import Element, ImageRecord
-from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de, pesos_padrao
+from pipeline.run import CABECA_ILUMINACAO, CABECA_RESIDUOS, CABECA_SINAL, _detetor
+from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de,pesos_padrao
 
 RAIO_COBERTURA_M= 30.0
 
@@ -159,6 +160,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--limiar-classe", type=float, default=0.3)
     parser.add_argument("--cabeca-sinal", default=CABECA_SINAL)
     parser.add_argument("--cabeca-iluminacao", default=CABECA_ILUMINACAO)
+    parser.add_argument("--cabeca-residuos", default=CABECA_RESIDUOS)
     parser.add_argument("--sem-refinar", action="store_true")
     parser.add_argument("--anon-dir", help="por omissão data/anon (catálogo) ou data/avaliacao/imagens")
     parser.add_argument("--fonte", choices=("catalogo", "mapillary"), default="catalogo")

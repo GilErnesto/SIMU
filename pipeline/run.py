@@ -40,6 +40,13 @@ PESOS_EXTRA= (Path("models/detetor_b23.pt"), Path("models/detetor_b23_1280.pt"),
 def pesos_padrao() -> str:
     return ",".join(str(p) for p in (PESOS_PRINCIPAIS, *PESOS_EXTRA) if p == PESOS_PRINCIPAIS or p.exists())
 CABECA_ILUMINACAO= "models/tipo_iluminacao.npz"
+CABECA_RESIDUOS= "models/tipo_residuos.npz"
+# categoria -> (atributo em args, caminho por omissão)
+CABECAS= {
+    "sinal": ("cabeca_sinal", CABECA_SINAL),
+    "iluminacao": ("cabeca_iluminacao", CABECA_ILUMINACAO),
+    "residuos": ("cabeca_residuos", CABECA_RESIDUOS),
+}
 
 
 def _variavel(nome: str) -> str:
@@ -61,6 +68,18 @@ def tipo_de_detetor(args: argparse.Namespace) -> str:
     return args.detetor
 
 
+def _cabecas(args: argparse.Namespace) -> dict[str, Path]:
+    """Cabeças de tipo a carregar: só as que existem em disco.
+
+    Cada caminho vem de args (por exemplo --cabeca-residuos) ou do valor por
+    omissão; quem não tiver o argumento (worker, run) usa o caminho por omissão.
+    """
+    cabecas= {}
+    for categoria, (atributo, padrao) in CABECAS.items():
+        caminho= Path(getattr(args, atributo, None) or padrao)
+        if caminho.exists():
+            cabecas[categoria]= caminho
+    return cabecas
 def _versao(args: argparse.Namespace, classes, ficheiros: list[Path]) -> str:
     resumo= hashlib.sha1()
     resumo.update(
@@ -97,11 +116,13 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
     if not args.sem_refinar:
         from pipeline.detect.refinar import DuasFases, Refinador
 
-        cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
-        cabecas= {"sinal": cabeca} if cabeca.exists() else {}
-        cabeca_iluminacao= Path(getattr(args, "cabeca_iluminacao", None) or CABECA_ILUMINACAO)
-        if cabeca_iluminacao.exists():
-            cabecas["iluminacao"]= cabeca_iluminacao
+        detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=_cabecas(args)), classes)
+    return Limiares(detetor, classes) if limiares else detetor
+    cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
+    cabecas= {"sinal": cabeca} if cabeca.exists() else {}
+    cabeca_iluminacao= Path(getattr(args, "cabeca_iluminacao", None) or CABECA_ILUMINACAO)
+    if cabeca_iluminacao.exists():
+        cabecas["iluminacao"]= cabeca_iluminacao
         ficheiros.extend(cabecas.values())
         refinador= Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas)
         # Each ensemble member is refined on its own, then they are merged: on the gold set this beat
