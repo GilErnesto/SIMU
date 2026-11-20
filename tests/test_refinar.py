@@ -243,6 +243,29 @@ def test_varios_textos_do_mesmo_tipo_somam_a_probabilidade():
     assert previsto[0][1] > 0.4
 
 
+def _logits_negativo_e(categoria, classe, negativo= 3.0, real= 2.0):
+    linha= [0.0] * _total(categoria)
+    linha[_total(categoria) - 1]= negativo
+    linha[_indice(categoria, classe)]= real
+    return linha
+
+
+def test_negativo_abaixo_do_limiar_de_descarte_fica_com_o_melhor_tipo_real():
+    assert CLASSES.categorias["sinal"].limiar_descarte == 0.7
+    logits= _logits_negativo_e("sinal", "perigo")
+    probs= np.exp(logits) / np.exp(logits).sum()
+    assert 0.3 < probs.max() < 0.7  # the negative wins, but not strongly enough to discard
+    fases= DuasFases(DetetorFalso([_det("sinal", "outro", confianca=0.64)]), _refinador([logits], limiar=0.3), CLASSES)
+    (unica,)= fases.detect("img", _imagem())
+    assert unica.class_name == "perigo"
+    assert unica.confidence == 0.64
+
+
+def test_negativo_forte_continua_a_descartar():
+    fases= DuasFases(DetetorFalso([_det("sinal", "outro")]), _refinador([_logits_negativo("sinal")], limiar=0.3), CLASSES)
+    assert fases.detect("img", _imagem()) == []
+
+
 def test_cabeca_de_iluminacao_descarta_nao_luz_e_mantem_poste_luz():
     cabeca= Cabeca(["nao_luz", "poste_luz"], np.array([[5.0, 0.0], [0.0, 5.0]]), np.zeros(2))
     for embedding, esperado in (([1.0, 0.0], []), ([0.0, 1.0], ["poste_luz"])):

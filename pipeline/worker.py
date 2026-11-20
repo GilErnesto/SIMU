@@ -18,7 +18,7 @@ from pipeline.config import Classes, Municipio, aplicar_bbox, load_classes, load
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.ingest import mapillary, uploads
-from pipeline.run import CABECA_SINAL, NOME_CHECKPOINT, _detetor, _variavel, processar
+from pipeline.run import CABECA_SINAL, NOME_CHECKPOINT, _detetor, _variavel, pesos_padrao, processar
 
 INTERVALO_S= 3.0
 PASSO_PROGRESSO= 5
@@ -181,7 +181,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--sem-refinar", action="store_true")
     parser.add_argument("--limiar-classe", type=float, default=0.3)
     parser.add_argument("--cabeca-sinal", default=CABECA_SINAL)
-    parser.add_argument("--pesos", default="models/detetor.pt")
+    parser.add_argument("--pesos", default=pesos_padrao())
     parser.add_argument("--uma-vez", action="store_true", help="processa a fila e termina")
     args= parser.parse_args(argv)
     load_dotenv()

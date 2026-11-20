@@ -154,7 +154,7 @@ def test_config_expoe_taxonomia_e_municipio(cliente):
     assert resposta.status_code == 200
     dados= resposta.json()
     assert dados["categorias"]["sinal"]["rotulo"] == "Sinais"
-    assert dados["categorias"]["sinal"]["classes"][0] == {"id": "stop", "rotulo": "Stop"}
+    assert dados["categorias"]["sinal"]["classes"][0] == {"id": "perigo", "rotulo": "Sinais de perigo"}
     assert len(dados["bbox"]) == 4
     assert "rejeitado" in dados["estados"]
 

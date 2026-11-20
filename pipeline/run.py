@@ -32,6 +32,13 @@ ADIANTE= 2
 PREPARADORES= 2
 NOME_CHECKPOINT= "checkpoint.jsonl"
 CABECA_SINAL= "models/tipo_sinal.npz"
+# Ensemble of detectors (see pipeline/detect/conjunto.py); the extra ones are used when present.
+PESOS_PRINCIPAIS= Path("models/detetor.pt")
+PESOS_EXTRA= (Path("models/detetor_b23.pt"), Path("models/detetor_b23_1280.pt"), Path("models/detetor_b23p_1280.pt"))
+
+
+def pesos_padrao() -> str:
+    return ",".join(str(p) for p in (PESOS_PRINCIPAIS, *PESOS_EXTRA) if p == PESOS_PRINCIPAIS or p.exists())
 CABECA_ILUMINACAO= "models/tipo_iluminacao.npz"
 CABECA_RESIDUOS= "models/tipo_residuos.npz"
 # categoria -> (atributo em args, caminho por omissão)
@@ -49,9 +56,15 @@ def _variavel(nome: str) -> str:
     return valor
 
 
+def lista_de_pesos(pesos: str) -> list[Path]:
+    """--pesos takes one YOLO file or several separated by commas (an ensemble)."""
+    return [Path(p.strip()) for p in str(pesos).split(",") if p.strip()]
+
+
 def tipo_de_detetor(args: argparse.Namespace) -> str:
     if args.detetor == "auto":
-        return "yolo" if Path(args.pesos).exists() else "owlv2"
+        pesos= lista_de_pesos(args.pesos)
+        return "yolo" if pesos and all(p.exists() for p in pesos) else "owlv2"
     return args.detetor
 
 
@@ -69,7 +82,19 @@ def _cabecas(args: argparse.Namespace) -> dict[str, Path]:
     return cabecas
 def _versao(args: argparse.Namespace, classes, ficheiros: list[Path]) -> str:
     resumo= hashlib.sha1()
-    resumo.update(repr((tipo_de_detetor(args), args.limiar, args.sem_refinar, args.limiar_classe, classes)).encode())
+    resumo.update(
+        repr(
+            (
+                tipo_de_detetor(args),
+                args.limiar,
+                args.sem_refinar,
+                args.limiar_classe,
+                getattr(args, "sem_aumento", False),
+                getattr(args, "ladrilhos", False),
+                classes,
+            )
+        ).encode()
+    )
     for ficheiro in ficheiros:
         resumo.update(ficheiro.read_bytes())
     return resumo.hexdigest()[:16]
@@ -78,12 +103,16 @@ def _versao(args: argparse.Namespace, classes, ficheiros: list[Path]) -> str:
 def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
     ficheiros= []
     if tipo_de_detetor(args) == "yolo":
-        detetor= Detector.from_weights(Path(args.pesos), classes, limiar=args.limiar)
-        ficheiros.append(Path(args.pesos))
+        pesos= lista_de_pesos(args.pesos)
+        membros= [
+            Detector.from_weights(p, classes, limiar=args.limiar, aumentar=not getattr(args, "sem_aumento", False))
+            for p in pesos
+        ]
+        ficheiros.extend(pesos)
     else:
         from pipeline.detect.owl import OwlDetector
 
-        detetor= OwlDetector.load(classes, limiar=args.limiar)
+        membros= [OwlDetector.load(classes, limiar=args.limiar)]
     if not args.sem_refinar:
         from pipeline.detect.refinar import DuasFases, Refinador
 
@@ -95,7 +124,20 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
     if cabeca_iluminacao.exists():
         cabecas["iluminacao"]= cabeca_iluminacao
         ficheiros.extend(cabecas.values())
-        detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas), classes)
+        refinador= Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas)
+        # Each ensemble member is refined on its own, then they are merged: on the gold set this beat
+        # merging the raw boxes first (the type check lowers odd boxes before they are averaged).
+        membros= [DuasFases(membro, refinador, classes) for membro in membros]
+    if len(membros) == 1:
+        detetor= membros[0]
+    else:
+        from pipeline.detect.conjunto import Conjunto
+
+        detetor= Conjunto(membros)
+    if getattr(args, "ladrilhos", False):
+        from pipeline.detect.ladrilhos import Ladrilhos
+
+        detetor= Ladrilhos(detetor)
     resultado= Limiares(detetor, classes) if limiares else detetor
     resultado.versao= _versao(args, classes, ficheiros)
     return resultado
@@ -285,7 +327,17 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--sem-refinar", action="store_true", help="só os três grandes, sem tipo")
     parser.add_argument("--limiar-classe", type=float, default=0.3, help="confiança mínima do tipo")
     parser.add_argument("--cabeca-sinal", default=CABECA_SINAL, help="classificador do tipo de sinal, se existir")
-    parser.add_argument("--pesos", default="models/detetor.pt", help="pesos YOLO")
+    parser.add_argument("--pesos", default=pesos_padrao(), help="pesos YOLO; vários separados por vírgula = conjunto")
+    parser.add_argument(
+        "--sem-aumento",
+        action="store_true",
+        help="desliga o aumento em teste do YOLO (inversão e escalas): ~2x mais rápido, encontra menos sinais",
+    )
+    parser.add_argument(
+        "--ladrilhos",
+        action="store_true",
+        help="procura também em ladrilhos de 1024 px das fotos grandes: mais sinais pequenos, ~7x mais lento",
+    )
     parser.add_argument("--egoblur", default="models/egoblur", help="pasta com os modelos EgoBlur")
     parser.add_argument("--anon-dir", default="data/anon", help="destino das imagens anonimizadas")
     parser.add_argument(

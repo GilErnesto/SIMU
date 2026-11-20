@@ -18,7 +18,8 @@ def test_sinal_confiante_mantem_classe():
 
 def test_sinal_pouco_confiante_cai_na_superclasse():
     assert resolve("limite_velocidade", 0.2, CLASSES) == ("sinal", "proibicao", True)
-    assert resolve("stop", 0.2, CLASSES) == ("sinal", "outro", True)
+    assert resolve("stop", 0.2, CLASSES) == ("sinal", "cedencia", True)
+    assert resolve("perigo", 0.2, CLASSES) == ("sinal", "outro", True)
 
 
 def test_superclasse_nunca_e_obstruida():
