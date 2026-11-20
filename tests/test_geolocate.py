@@ -7,6 +7,7 @@ import pytest
 from pyproj import Transformer
 
 from pipeline.config import load_classes, load_municipio
+from pipeline.geolocate import locate as L
 from pipeline.geolocate.bearing import (
     horizontal_fov,
     monocular_distance,
@@ -391,12 +392,56 @@ def test_duas_luzes_de_tipos_diferentes_so_com_estimativa_monocular_nao_ficam_no
     x0, y0= _origem_metrica()
     a= _imagem("a", x0, y0, 0)
     detecoes= [
-        Detection(a.id, "iluminacao", "poste_luz", (430, 300, 470, 500), 0.9, False),
-        Detection(a.id, "iluminacao", "candeeiro", (530, 300, 570, 500), 0.8, False),
+        Detection(a.id, "iluminacao", "poste_luz", (430, 247, 470, 553), 0.9, False),
+        Detection(a.id, "iluminacao", "candeeiro", (530, 312, 570, 488), 0.8, False),
     ]
-    for classes, minimo in ((CLASSES, 2.0), (_sem_tipos_exclusivos(), 0.0)):
+    for classes, minimo in ((CLASSES, 1.5), (_sem_tipos_exclusivos(), 0.0)):
         elementos= locate([a], detecoes, MUNICIPIO, classes)
         assert sorted(e.class_name for e in elementos) == ["candeeiro", "poste_luz"]
         p, q= (PARA_METROS.transform(e.lon, e.lat) for e in elementos)
         distancia= math.dist(p, q)
         assert distancia >= minimo if classes is CLASSES else distancia < 0.5
+
+
+def test_caixa_pequena_e_menos_confiante_dentro_de_outra_da_luz_e_descartada():
+    pai= Detection("i", "iluminacao", "luz", (100, 100, 140, 500), 0.9, False)
+    fragmento= Detection("i", "iluminacao", "luz", (105, 400, 135, 480), 0.5, False)
+    vizinha= Detection("i", "iluminacao", "luz", (300, 100, 340, 500), 0.5, False)
+    assert L.suprimir_contidas([pai, fragmento, vizinha], CLASSES) == [pai, vizinha]
+
+
+def test_caixa_contida_mais_confiante_ou_so_em_parte_fica():
+    pai= Detection("i", "iluminacao", "luz", (100, 100, 140, 500), 0.5, False)
+    forte= Detection("i", "iluminacao", "luz", (105, 400, 135, 480), 0.9, False)
+    metade= Detection("i", "iluminacao", "luz", (120, 300, 220, 400), 0.4, False)
+    assert L.suprimir_contidas([pai, forte, metade], CLASSES) == [pai, forte, metade]
+
+
+def test_suprimir_contidas_so_vale_para_as_categorias_configuradas():
+    pai= Detection("i", "sinal", "stop", (100, 100, 140, 500), 0.9, False)
+    dentro= Detection("i", "sinal", "stop", (105, 400, 135, 480), 0.5, False)
+    outra_imagem= Detection("j", "iluminacao", "luz", (105, 400, 135, 480), 0.5, False)
+    assert L.suprimir_contidas([pai, dentro, outra_imagem], CLASSES) == [pai, dentro, outra_imagem]
+    assert CLASSES.categorias["iluminacao"].suprimir_contidas == 0.8
+    assert CLASSES.categorias["sinal"].suprimir_contidas is None
+
+
+def test_a_luz_declara_alturas_por_tipo_e_os_outros_nao():
+    assert CLASSES.categorias["iluminacao"].alturas_por_classe == {"candeeiro": 4.0, "poste_luz": 7.0}
+    assert CLASSES.categorias["sinal"].alturas_por_classe == {}
+
+
+def _distancia_monocular(classe, alturas=None):
+    x0, y0= _origem_metrica()
+    a= _imagem("a", x0, y0, 0)
+    deteccao= Detection(a.id, "iluminacao", classe, (480, 300, 520, 500), 0.9, False)
+    ponto= L._monocular(L._observe(deteccao, a), (x0, y0), 6.0, 100.0, alturas)
+    return math.dist(ponto, (x0, y0))
+
+
+def test_a_mesma_caixa_da_distancias_proporcionais_a_altura_do_tipo():
+    alturas= {"candeeiro": 4.0, "poste_luz": 7.0}
+    geral= _distancia_monocular("luz", alturas)
+    assert _distancia_monocular("candeeiro", alturas) == pytest.approx(geral * 4 / 6)
+    assert _distancia_monocular("poste_luz", alturas) == pytest.approx(geral * 7 / 6)
+    assert _distancia_monocular("poste_luz") == pytest.approx(geral)

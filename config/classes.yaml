@@ -8,6 +8,10 @@
 # alcance_max_m: observações estimadas mais longe são ignoradas (60 por omissão).
 # seguir_video: nos vídeos, segue cada caixa de frame em frame (um trilho, um elemento).
 # tipos_exclusivos: as classes são tipos alternativos do mesmo objeto (um elemento só tem um tipo).
+# alturas_por_classe: altura típica por tipo, para a distância monocular (altura_m vale para o resto).
+# lado_minimo_px: recortes mais pequenos não vão ao classificador de tipo (12 por omissão).
+# inclinacao_panorama: graus; nos panoramas, vistas inclinadas para cima só para esta categoria (postes altos e perto).
+# suprimir_contidas: caixa de menor confiança com esta fração dentro de outra maior da mesma imagem é descartada.
 categorias:
   sinal:
     rotulo: Sinais
@@ -84,6 +88,12 @@ categorias:
     alcance_max_m: 30
     seguir_video: true
     tipos_exclusivos: true
+    alturas_por_classe:
+      candeeiro: 4
+      poste_luz: 7
+    lado_minimo_px: 8
+    suprimir_contidas: 0.8
+    inclinacao_panorama: 35
     limiar_detecao: 0.3
     classes:
       - luz

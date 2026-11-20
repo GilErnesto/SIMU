@@ -21,7 +21,7 @@ from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.models import Element, ImageRecord
-from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor
+from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de
 
 RAIO_COBERTURA_M= 30.0
 
@@ -99,7 +99,7 @@ def detetar(registos: list[ImageRecord], detetor, cache: Path, saida=sys.stderr)
             continue
         registo.height, registo.width= imagem.shape[:2]
         if registo.camera_type == "spherical":
-            deteccoes= detect_panorama(detetor, registo.id, imagem)
+            deteccoes= detect_panorama(detetor, registo.id, imagem, inclinadas=inclinadas_de(detetor))
         else:
             deteccoes= detetor.detect(registo.id, imagem)
         checkpoint.append(cache, registo, deteccoes)

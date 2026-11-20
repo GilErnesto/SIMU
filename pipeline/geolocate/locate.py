@@ -33,8 +33,15 @@ def _observe(detecao: Detection, imagem: ImageRecord) -> Observation:
     return Observation(detecao, imagem, rumo)
 
 
-def _monocular(obs: Observation, origem: tuple[float, float], altura_m: float, alcance_m: float= ALCANCE_MAX_M):
+def _monocular(
+    obs: Observation,
+    origem: tuple[float, float],
+    altura_m: float,
+    alcance_m: float= ALCANCE_MAX_M,
+    alturas: dict[str, float] | None= None,
+):
     imagem= obs.image
+    altura_m= (alturas or {}).get(obs.detection.class_name, altura_m)
     _, y1, _, y2= obs.detection.bbox_xyxy
     fov_v= vertical_fov(imagem.camera_type, imagem.width, imagem.height)
     distancia= monocular_distance(altura_m, y2 - y1, imagem.height, fov_v)
@@ -44,7 +51,7 @@ def _monocular(obs: Observation, origem: tuple[float, float], altura_m: float, a
     return origem[0] + distancia * dx, origem[1] + distancia * dy
 
 
-def _candidates(observacoes, origens, altura_m, alcance_m):
+def _candidates(observacoes, origens, altura_m, alcance_m, alturas= None):
     candidatos= []
     usadas= set()
     for i, j in combinations(range(len(observacoes)), 2):
@@ -58,7 +65,7 @@ def _candidates(observacoes, origens, altura_m, alcance_m):
             usadas.update((i, j))
     for i, obs in enumerate(observacoes):
         if i not in usadas:
-            ponto= _monocular(obs, origens[i], altura_m, alcance_m)
+            ponto= _monocular(obs, origens[i], altura_m, alcance_m, alturas)
             if ponto is not None:
                 candidatos.append((ponto, {i}, "monocular"))
     return candidatos
@@ -176,7 +183,7 @@ def _consenso(grupos, observacoes, origens, config):
     for i, obs in enumerate(observacoes):
         if i in usadas:
             continue
-        ponto= _monocular(obs, origens[i], config.altura_m, config.alcance_max_m)
+        ponto= _monocular(obs, origens[i], config.altura_m, config.alcance_max_m, config.alturas_por_classe)
         if ponto is not None:
             soltas.append((ponto, {i}, "monocular"))
     if soltas:
@@ -228,7 +235,10 @@ def _grupos_por_trilhos(observacoes, origens, config, frames):
     for indices in trilhos(observacoes, frames):
         if len(indices) < MIN_CAIXAS_TRILHO:
             continue
-        monoculares= {i: _monocular(observacoes[i], origens[i], config.altura_m, config.alcance_max_m) for i in indices}
+        monoculares= {
+            i: _monocular(observacoes[i], origens[i], config.altura_m, config.alcance_max_m, config.alturas_por_classe)
+            for i in indices
+        }
         perto= [i for i, ponto in monoculares.items() if ponto is not None]
         if not perto:
             continue
@@ -271,12 +281,42 @@ def _elementos(categoria, grupos_c, observacoes, origens, config, para_graus) ->
     return elementos
 
 
+def _area(caixa: tuple[float, float, float, float]) -> float:
+    return max(caixa[2] - caixa[0], 0.0) * max(caixa[3] - caixa[1], 0.0)
+
+
+def _contida(menor: Detection, maior: Detection, fracao: float) -> bool:
+    a, b= menor.bbox_xyxy, maior.bbox_xyxy
+    area= _area(a)
+    if area <= 0 or area >= _area(b) or menor.confidence > maior.confidence:
+        return False
+    dentro= _area((max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])))
+    return dentro / area >= fracao
+
+
+def suprimir_contidas(detections: list[Detection], classes: Classes) -> list[Detection]:
+    por_grupo= defaultdict(list)
+    for detecao in detections:
+        por_grupo[(detecao.image_id, detecao.category)].append(detecao)
+    resultado= []
+    for (_, categoria), lista in por_grupo.items():
+        fracao= classes.categorias[categoria].suprimir_contidas
+        if fracao is None:
+            resultado.extend(lista)
+            continue
+        resultado.extend(
+            d for d in lista if not any(_contida(d, outra, fracao) for outra in lista if outra is not d)
+        )
+    return resultado
+
+
 def locate(
     images: list[ImageRecord],
     detections: list[Detection],
     municipio: Municipio,
     classes: Classes,
 ) -> list[Element]:
+    detections= suprimir_contidas(detections, classes)
     por_id= {imagem.id: imagem for imagem in images}
     para_metros= Transformer.from_crs("EPSG:4326", municipio.crs_metrico, always_xy=True)
     para_graus= Transformer.from_crs(municipio.crs_metrico, "EPSG:4326", always_xy=True)
@@ -299,7 +339,7 @@ def locate(
                 elementos.extend(_elementos(categoria, grupos_v, de_video, origens_v, config, para_graus))
             observacoes= [o for o in observacoes if o.image.fonte != FONTE_VIDEO]
         origens= [para_metros.transform(o.image.lon, o.image.lat) for o in observacoes]
-        candidatos= _candidates(observacoes, origens, config.altura_m, config.alcance_max_m)
+        candidatos= _candidates(observacoes, origens, config.altura_m, config.alcance_max_m, config.alturas_por_classe)
         if not candidatos:
             continue
         pontos= np.array([c[0] for c in candidatos])
@@ -308,7 +348,7 @@ def locate(
             [c for c, r in zip(candidatos, rotulos) if r == rotulo] for rotulo in sorted(set(rotulos.tolist()))
         ]
         grupos_c= _consenso(grupos_c, observacoes, origens, config)
-        monocular= partial(_monocular, alcance_m=config.alcance_max_m)
+        monocular= partial(_monocular, alcance_m=config.alcance_max_m, alturas=config.alturas_por_classe)
         compativeis= set(config.classes if config.tipos_exclusivos else config.gerais)
         grupos_c= [
             separado

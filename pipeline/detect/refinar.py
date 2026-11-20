@@ -16,13 +16,16 @@ MARGEM= 0.15
 LADO_MINIMO= 12
 
 
-def recortar(image: np.ndarray, caixa: tuple[float, float, float, float]) -> np.ndarray | None:
+def recortar(
+    image: np.ndarray, caixa: tuple[float, float, float, float], minimo: float | None= None
+) -> np.ndarray | None:
     altura, largura= image.shape[:2]
     x1, y1, x2, y2= caixa
     mx, my= (x2 - x1) * MARGEM, (y2 - y1) * MARGEM
     x1, y1= max(int(x1 - mx), 0), max(int(y1 - my), 0)
     x2, y2= min(int(x2 + mx), largura), min(int(y2 + my), altura)
-    if x2 - x1 < LADO_MINIMO or y2 - y1 < LADO_MINIMO:
+    minimo= LADO_MINIMO if minimo is None else minimo
+    if x2 - x1 < minimo or y2 - y1 < minimo:
         return None
     return image[y1:y2, x1:x2]
 
@@ -115,7 +118,7 @@ class DuasFases:
         for posicao, detecao in enumerate(detecoes):
             categoria= self.classes.categorias[detecao.category]
             if detecao.class_name in (*categoria.gerais, *categoria.descricoes):
-                recorte= recortar(image, detecao.bbox_xyxy)
+                recorte= recortar(image, detecao.bbox_xyxy, categoria.lado_minimo_px)
                 if recorte is not None:
                     por_categoria[detecao.category].append((posicao, recorte))
         resultado= list(detecoes)

@@ -43,7 +43,7 @@ def _caixa(frame, origem, poste):
     if abs(relativo) > fov / 2 - 1 or not 8 <= distancia <= 30:
         return None
     centro= (relativo / fov + 0.5) * LARGURA
-    altura= math.degrees(2 * math.atan(6 / (2 * distancia))) / vertical_fov("perspective", LARGURA, ALTURA) * ALTURA
+    altura= math.degrees(2 * math.atan(7 / (2 * distancia))) / vertical_fov("perspective", LARGURA, ALTURA) * ALTURA
     return Detection(frame.id, "iluminacao", "poste_luz", (centro - 15, 900 - altura / 2, centro + 15, 900 + altura / 2), 0.9, False)
 
 

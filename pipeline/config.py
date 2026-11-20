@@ -40,6 +40,10 @@ class Categoria:
     alcance_max_m: float= ALCANCE_MAX_M
     seguir_video: bool= False
     tipos_exclusivos: bool= False
+    alturas_por_classe: dict[str, float]= field(default_factory=dict)
+    lado_minimo_px: float | None= None
+    suprimir_contidas: float | None= None
+    inclinacao_panorama: float | None= None
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,10 @@ def load_classes(path: Path) -> Classes:
                 alcance_max_m=float(campos.get("alcance_max_m", ALCANCE_MAX_M)),
                 seguir_video=bool(campos.get("seguir_video", False)),
                 tipos_exclusivos=bool(campos.get("tipos_exclusivos", False)),
+                alturas_por_classe={str(k): float(v) for k, v in dict(campos.get("alturas_por_classe", {})).items()},
+                lado_minimo_px=None if campos.get("lado_minimo_px") is None else float(campos["lado_minimo_px"]),
+                suprimir_contidas=None if campos.get("suprimir_contidas") is None else float(campos["suprimir_contidas"]),
+                inclinacao_panorama=None if campos.get("inclinacao_panorama") is None else float(campos["inclinacao_panorama"]),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

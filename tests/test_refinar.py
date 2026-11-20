@@ -149,6 +149,30 @@ def test_recorte_demasiado_pequeno_e_ignorado():
     assert refinador.processor.chamadas == []
 
 
+def test_luz_pequena_mas_acima_do_minimo_da_luz_vai_ao_classificador():
+    refinador= _refinador([_logits_para("iluminacao", "candeeiro")])
+    luz= _det("iluminacao", "luz", caixa= (10.0, 10.0, 18.0, 40.0))
+    resultado= DuasFases(DetetorFalso([luz]), refinador, CLASSES).detect("img", _imagem())
+    assert [d.class_name for d in resultado] == ["candeeiro"]
+    assert len(refinador.processor.chamadas) == 1
+
+
+def test_o_minimo_da_luz_nao_se_aplica_aos_sinais():
+    refinador= _refinador([_logits_para("sinal", "stop")])
+    sinal= _det("sinal", "outro", caixa= (10.0, 10.0, 18.0, 40.0))
+    resultado= DuasFases(DetetorFalso([sinal]), refinador, CLASSES).detect("img", _imagem())
+    assert [d.class_name for d in resultado] == ["outro"]
+    assert refinador.processor.chamadas == []
+    assert CLASSES.categorias["iluminacao"].lado_minimo_px == 8
+    assert CLASSES.categorias["sinal"].lado_minimo_px is None
+
+
+def test_recortar_aceita_um_minimo_proprio():
+    imagem= _imagem()
+    assert recortar(imagem, (10.0, 10.0, 18.0, 40.0)) is None
+    assert recortar(imagem, (10.0, 10.0, 18.0, 40.0), 8) is not None
+
+
 def test_recortar_respeita_os_limites():
     recorte= recortar(_imagem(), (0.0, 0.0, 300.0, 200.0))
     assert recorte.shape[:2] == (200, 300)
