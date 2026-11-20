@@ -69,6 +69,10 @@ def amostrar(registos: list[ImageRecord], maximo: int | None) -> list[ImageRecor
     return sorted(escolhidas, key=lambda r: r.id_fonte)
 
 
+def so_estas(registos: list[ImageRecord], ids: set[str]) -> list[ImageRecord]:
+    return sorted((r for r in registos if r.id_fonte in ids), key=lambda r: r.id_fonte)
+
+
 def imagens_do_mapillary(
     registos: list[ImageRecord], pasta_anon: Path, carregar_anonimizador, baixar= None, saida=sys.stderr
 ) -> list[ImageRecord]:
@@ -171,6 +175,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--anon-dir", help="por omissão data/anon (catálogo) ou data/avaliacao/imagens")
     parser.add_argument("--fonte", choices=("catalogo", "mapillary"), default="catalogo")
     parser.add_argument("--max-imagens", type=int, help="amostra estável das imagens do Mapillary")
+    parser.add_argument("--so-imagens", help="ficheiro com um id de imagem do Mapillary por linha: usa só essas, sem amostrar")
     parser.add_argument("--classes", default="config/classes.yaml")
     parser.add_argument("--egoblur", default="models/egoblur")
     parser.add_argument("--resultados", default="data/avaliacao")
@@ -190,7 +195,11 @@ def main(argv: list[str] | None= None) -> int:
             token= os.environ.get("MAPILLARY_TOKEN", "").strip()
             if not token:
                 raise ErroPipeline("Variável de ambiente MAPILLARY_TOKEN em falta. Ver .env.example.")
-            listadas= amostrar(mapillary.fetch_images(municipio.bbox, token), args.max_imagens)
+            todas= mapillary.fetch_images(municipio.bbox, token)
+            if args.so_imagens:
+                listadas= so_estas(todas, set(Path(args.so_imagens).read_text(encoding="utf-8").split()))
+            else:
+                listadas= amostrar(todas, args.max_imagens)
             registos= imagens_do_mapillary(
                 listadas,
                 Path(args.anon_dir or "data/avaliacao/imagens"),
