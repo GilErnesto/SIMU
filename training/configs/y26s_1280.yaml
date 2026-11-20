@@ -1,0 +1,11 @@
+# YOLO26 (COCO-pretrained, models/base) fine-tuned on reviewed batches 2+3 (never the batch-1 test set).
+dados: data/datasets/b23/data.yaml
+modelo: models/base/yolo26s.pt
+epocas: 100
+imgsz: 1280
+lote: 4
+paciencia: 20
+trabalhadores: 1
+nome: y26s_1280
+destino: data/treino/y26s_1280_detetor.pt
+graficos: false  # matplotlib's native modules are blocked by App Control here

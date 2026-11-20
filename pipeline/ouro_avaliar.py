@@ -18,6 +18,35 @@ LIMIAR_PROPOSTA= 0.1
 TAMANHOS= ((0, 24, "<24 px"), (24, 48, "24-48 px"), (48, 96, "48-96 px"), (96, 10**6, ">=96 px"))
 
 
+def _metade(imagem):
+    altura, largura= imagem.shape[:2]
+    pequena= cv2.resize(imagem, (largura // 2, altura // 2), interpolation=cv2.INTER_AREA)
+    return cv2.resize(pequena, (largura, altura), interpolation=cv2.INTER_LINEAR)
+
+
+def _movimento(imagem, comprimento: int= 9):
+    import numpy as np
+
+    nucleo= np.zeros((comprimento, comprimento), np.float32)
+    nucleo[comprimento // 2, :]= 1.0 / comprimento
+    return cv2.filter2D(imagem, -1, nucleo)
+
+
+def _jpeg(imagem, qualidade: int= 15):
+    _, codificada= cv2.imencode(".jpg", imagem, [cv2.IMWRITE_JPEG_QUALITY, qualidade])
+    return cv2.imdecode(codificada, cv2.IMREAD_COLOR)
+
+
+# Whole-photo degradations for robustness runs (boxes stay where they are).
+DEGRADACOES= {
+    "desfocada": lambda im: cv2.GaussianBlur(im, (0, 0), 2.0),
+    "movimento": _movimento,
+    "escura": lambda im: cv2.convertScaleAbs(im, alpha=0.35),
+    "jpeg": _jpeg,
+    "metade": _metade,
+}
+
+
 def iou(a, b) -> float:
     largura= min(a[2], b[2]) - max(a[0], b[0])
     altura= min(a[3], b[3]) - max(a[1], b[1])
@@ -59,7 +88,11 @@ def caixas_de_ouro(telas: dict) -> dict[str, list[dict]]:
     }
 
 
-def medir(ouro: dict[str, list[dict]], previsoes: dict[str, list[dict]], limiar: float) -> dict:
+def medir(
+    ouro: dict[str, list[dict]], previsoes: dict[str, list[dict]], limiar: float, familia: dict[str, str] | None= None
+) -> dict:
+    """familia maps a subtype to its official category (stop -> cedencia) so types are compared by category."""
+    familia= familia or {}
     tp= fp= fn= certos= 0
     confusao= Counter()
     falsos= Counter()
@@ -76,8 +109,10 @@ def medir(ouro: dict[str, list[dict]], previsoes: dict[str, list[dict]], limiar:
             if i not in achadas_p:
                 falsos[p["classe"]]+= 1
         for i, j in pares:
-            confusao[(gold[j]["classe"], previstas[i]["classe"])]+= 1
-            certos+= previstas[i]["classe"] == gold[j]["classe"]
+            real= familia.get(gold[j]["classe"], gold[j]["classe"])
+            prevista= familia.get(previstas[i]["classe"], previstas[i]["classe"])
+            confusao[(real, prevista)]+= 1
+            certos+= prevista == real
         for j, g in enumerate(gold):
             altura= g["caixa"][3] - g["caixa"][1]
             for minimo, maximo, rotulo in TAMANHOS:
@@ -101,27 +136,33 @@ def _n(valor) -> str:
     return "n/a" if valor is None else f"{valor:.2f}"
 
 
-def relatorio(ouro: dict, previsoes: dict, nome: str, limiar_destaque: float) -> str:
+def relatorio(
+    ouro: dict, previsoes: dict, nome: str, limiar_destaque: float, familia: dict[str, str] | None= None
+) -> str:
+    familia= familia or {}
     n_ouro= sum(len(v) for v in ouro.values())
     linhas= [
         f"# Gold-set results: {nome}",
         "",
-        f"{len(ouro)} reviewed images, {n_ouro} gold boxes, IoU >= {LIMIAR_IOU}.",
+        (
+            f"{len(ouro)} reviewed images, {n_ouro} gold boxes, IoU >= {LIMIAR_IOU}. "
+            "Types are compared by official category (STOP counts as Cedência de passagem)."
+        ),
         "",
         "## Finding signs (any type)",
         "",
         "| Confidence >= | Found | False alarms | Missed | Precision | Recall | Type right when found |",
         "|---|---|---|---|---|---|---|",
     ]
-    for limiar in LIMIARES_RELATORIO:
-        m= medir(ouro, previsoes, limiar)
+    for limiar in sorted({*LIMIARES_RELATORIO, limiar_destaque}):
+        m= medir(ouro, previsoes, limiar, familia)
         tipo= f"{m['tipo_certo']}/{m['tp']} ({m['tipo_certo'] / m['tp']:.0%})" if m["tp"] else "n/a"
         marca= " (pipeline setting)" if limiar == limiar_destaque else ""
         linhas.append(
             f"| {limiar}{marca} | {m['tp']} | {m['fp']} | {m['fn']} | "
             f"{_n(m['precisao'])} | {_n(m['recall'])} | {tipo} |"
         )
-    m= medir(ouro, previsoes, limiar_destaque)
+    m= medir(ouro, previsoes, limiar_destaque, familia)
     linhas+= [
         "",
         f"## By sign type at confidence >= {limiar_destaque}",
@@ -132,12 +173,12 @@ def relatorio(ouro: dict, previsoes: dict, nome: str, limiar_destaque: float) ->
         "|---|---|---|---|---|---|---|---|",
     ]
     classes= sorted(
-        {c["classe"] for v in ouro.values() for c in v}
+        {familia.get(c["classe"], c["classe"]) for v in ouro.values() for c in v}
         | {p for _, p in m["confusao"]}
         | set(m["falsos"])
     )
     for classe in classes:
-        no_ouro= sum(1 for v in ouro.values() for c in v if c["classe"] == classe)
+        no_ouro= sum(1 for v in ouro.values() for c in v if familia.get(c["classe"], c["classe"]) == classe)
         achadas= sum(n for (g, _), n in m["confusao"].items() if g == classe)
         certas= m["confusao"].get((classe, classe), 0)
         previstas= sum(n for (_, p), n in m["confusao"].items() if p == classe)
@@ -171,6 +212,7 @@ def relatorio(ouro: dict, previsoes: dict, nome: str, limiar_destaque: float) ->
 
 
 def avaliar(args: argparse.Namespace) -> int:
+    from pipeline.detect.ladrilhos import detetar_com_ladrilhos
     from pipeline.ouro import CATEGORIAS, FICHEIRO, _guardar_atomico
     from pipeline.run import _detetor
 
@@ -199,20 +241,22 @@ def avaliar(args: argparse.Namespace) -> int:
         previsoes= {}
         for n, nome in enumerate(ouro, 1):
             imagem= cv2.imread(str(saida / "imagens" / dados["telas"][nome]["imagem"]))
+            if args.degradar:
+                imagem= DEGRADACOES[args.degradar](imagem)
             previsoes[nome]= [
                 {
                     "caixa": [round(v, 1) for v in d.bbox_xyxy],
                     "classe": d.class_name,
                     "confianca": round(d.confidence, 3),
                 }
-                for d in detetor.detect(nome, imagem)
+                for d in (detetar_com_ladrilhos(detetor, nome, imagem) if args.ladrilhos else detetor.detect(nome, imagem))
                 if d.category in dados.get("categorias", CATEGORIAS)
             ]
             if n % 25 == 0:
                 print(f"[{n}/{len(ouro)}] images scored", file=sys.stderr, flush=True)
         _guardar_atomico(cache, previsoes)
     destaque= classes.categorias["sinal"].limiar_detecao
-    texto= relatorio(ouro, previsoes, args.nome, destaque)
+    texto= relatorio(ouro, previsoes, args.nome, destaque, classes.categorias["sinal"].superclasse)
     (saida / f"results_{args.nome}.md").write_text(texto, encoding="utf-8")
     print(texto)
     return 0

@@ -103,7 +103,7 @@ class _DetetorFalso:
 def test_ladrilhos_cobrem_a_foto_grande_e_somam_o_desvio():
     import numpy as np
 
-    from pipeline.ouro import detetar_com_ladrilhos
+    from pipeline.detect.ladrilhos import detetar_com_ladrilhos
 
     detetor= _DetetorFalso()
     resultado= detetar_com_ladrilhos(detetor, "img", np.zeros((1536, 2048, 3), np.uint8))
@@ -116,8 +116,37 @@ def test_ladrilhos_cobrem_a_foto_grande_e_somam_o_desvio():
 def test_ladrilhos_nao_dividem_imagens_pequenas():
     import numpy as np
 
-    from pipeline.ouro import detetar_com_ladrilhos
+    from pipeline.detect.ladrilhos import detetar_com_ladrilhos
 
     detetor= _DetetorFalso()
     detetar_com_ladrilhos(detetor, "vista", np.zeros((960, 960, 3), np.uint8))
     assert detetor.tamanhos == [(960, 960)]
+
+
+def test_medir_compara_tipos_pela_categoria_oficial():
+    ouro= {"a": [_g([0, 0, 10, 10], "stop")]}
+    previsoes= {"a": [_p([0, 0, 10, 10], "cedencia")]}
+    assert medir(ouro, previsoes, 0.3)["tipo_certo"] == 0
+    assert medir(ouro, previsoes, 0.3, {"stop": "cedencia"})["tipo_certo"] == 1
+
+
+def test_ladrilhos_de_treino_cortam_caixas_e_ignoram_as_que_ficam_quase_fora():
+    from training.datasets.ouro import ladrilhos
+
+    caixas= [(0, 100.0, 100.0, 140.0, 140.0), (0, 1010.0, 100.0, 1050.0, 140.0)]
+    tiles= list(ladrilhos(2048, 1152, caixas))
+    primeiro= tiles[0]
+    assert primeiro[:4] == (0, 0, 1024, 1024)
+    assert len(primeiro[4]) == 1
+    assert primeiro[4][0][1] == 100 / 1024
+    assert len(tiles[1][4]) == 1  # the second box, whole, in the tile starting at x=768
+
+
+def test_degradacoes_mantem_o_tamanho_da_foto():
+    import numpy as np
+
+    from pipeline.ouro_avaliar import DEGRADACOES
+
+    foto= np.random.default_rng(0).integers(0, 255, (101, 203, 3), dtype=np.uint8)
+    for degradar in DEGRADACOES.values():
+        assert degradar(foto).shape == foto.shape

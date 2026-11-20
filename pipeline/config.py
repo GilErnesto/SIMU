@@ -29,8 +29,11 @@ class Categoria:
     descricoes: dict[str, str | list[str]]= field(default_factory=dict)
     negativos: tuple[str, ...]= ()
     limiar_detecao: float= 0.0
+    # CLIP discards a box (a negative text won) only with at least this probability; None = limiar_classe.
+    limiar_descarte: float | None= None
     alias: dict[str, str]= field(default_factory=dict)
     combinar_confianca: bool= True
+    exigem_confirmacao: tuple[str, ...]= ()
 
 
 @dataclass(frozen=True)
@@ -87,8 +90,10 @@ def load_classes(path: Path) -> Classes:
                 descricoes=dict(campos.get("descricoes", {})),
                 negativos=tuple(campos.get("negativos", ())),
                 limiar_detecao=float(campos.get("limiar_detecao", 0.0)),
+                limiar_descarte=None if campos.get("limiar_descarte") is None else float(campos["limiar_descarte"]),
                 alias=dict(campos.get("alias", {})),
                 combinar_confianca=bool(campos.get("combinar_confianca", True)),
+                exigem_confirmacao=tuple(campos.get("exigem_confirmacao", ())),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

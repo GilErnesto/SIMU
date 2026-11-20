@@ -100,19 +100,28 @@
 <script>
 "use strict";
 const CORES = { sinal: "#ffb020", iluminacao: "#4da3ff", residuos: "#3ecf8e" };
-// English names and a one-line hint for each class id (the server sends Portuguese labels).
+// Official Portuguese category names (Regulamento de Sinalização do Trânsito) and a one-line hint.
 const TIPOS = {
-  stop: ["Stop", "red octagon"],
-  cedencia: ["Give way", "inverted triangle, red border"],
-  limite_velocidade: ["Speed limit", "round, red ring, a number"],
-  proibicao: ["Prohibition", "round, red ring or red disc, no number"],
-  perigo: ["Danger", "triangle, red border, warning symbol"],
-  obrigacao: ["Mandatory", "round, blue, white arrow or symbol"],
-  informacao: ["Information", "blue square or rectangle: parking, crossing, direction"],
-  semaforo: ["Traffic light", "vehicle or pedestrian light"],
-  outro: ["Other sign", "a sign that fits none of the above"],
+  perigo: ["Perigo", "triângulo, orla vermelha (A)"],
+  cedencia: ["Cedência de passagem", "triângulo invertido, prioridade (B)"],
+  stop: ["Cedência — STOP", "octógono vermelho (B2)"],
+  proibicao: ["Proibição", "redondo, orla vermelha; inclui estacionamento proibido (C)"],
+  limite_velocidade: ["Proibição — limite de velocidade", "redondo, orla vermelha, número (C13)"],
+  obrigacao: ["Obrigação", "redondo, azul, seta ou símbolo branco (D)"],
+  prescricao: ["Prescrição específica", "pórticos com setas para as vias, placas de ZONA (E, F, G)"],
+  informacao: ["Informação", "quadrado azul: P, passadeira, sentido único, paragem (H)"],
+  pre_sinalizacao: ["Pré-sinalização", "painel antes do cruzamento com esquema e destinos (I)"],
+  direcao: ["Direção", "placa com nome do destino e seta, no cruzamento (J)"],
+  confirmacao: ["Confirmação", "lista de destinos com distâncias em km (L)"],
+  localidades: ["Localidades", "nome da localidade à entrada ou saída (N)"],
+  complementares: ["Complementares", "chevrons, balizas, marcadores amarelo/preto (O)"],
+  painel_adicional: ["Painel adicional", "placa pequena por baixo de outro sinal (Modelo)"],
+  turistico: ["Turístico-cultural", "fundo castanho (T)"],
+  temporaria: ["Sinalização temporária", "fundo amarelo, obras, ATENÇÃO"],
+  semaforo: ["Sinalização luminosa", "semáforo de veículos ou de peões"],
+  outro: ["Outro sinal", "não cabe em nenhuma categoria acima"],
 };
-const TECLAS = "123456789";
+const TECLAS = "123456789qwertyuio";
 const ZOOM_MAX = 16;
 let categorias = {}, telas = {}, ordem = [], idx = 0, sel = -1;
 let imagem = null, arrasto = null, paleta = [], mostrarRemovidas = false;

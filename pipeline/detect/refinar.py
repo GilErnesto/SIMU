@@ -55,6 +55,8 @@ class Refinador:
         self.limiar= limiar
         self.dispositivo= dispositivo
         self.cabecas= cabecas or {}
+        # Classes the head alone may not give: zero-shot CLIP or the detector must agree.
+        self.confirmar= {c.nome: set(c.exigem_confirmacao) for c in classes.categorias.values()}
         self.opcoes= {
             categoria.nome: _opcoes(categoria)
             for categoria in classes.categorias.values()
@@ -78,7 +80,15 @@ class Refinador:
         carregadas= {categoria: Cabeca.carregar(caminho) for categoria, caminho in (cabecas or {}).items()}
         return cls(processor, modelo, classes, limiar, dispositivo, carregadas)
 
-    def classificar(self, categoria: str, recortes: list[np.ndarray]) -> list[tuple[str | None, float]]:
+    def classificar(
+        self, categoria: str, recortes: list[np.ndarray], origens: list[str] | None= None
+    ) -> list[tuple[str | None, float]]:
+        return [(classe, probabilidade) for classe, probabilidade, _ in self.classificar_detalhado(categoria, recortes, origens)]
+
+    def classificar_detalhado(
+        self, categoria: str, recortes: list[np.ndarray], origens: list[str] | None= None
+    ) -> list[tuple[str | None, float, str | None]]:
+        """(type or None for a negative, its probability, best real type even when a negative won)."""
         import torch
 
         ids, textos= self.opcoes[categoria]
@@ -88,18 +98,30 @@ class Refinador:
         with torch.no_grad():
             saida= self.modelo(**entradas)
         probabilidades= saida.logits_per_image.softmax(dim=-1).cpu().tolist()
-        cabeca= self.cabecas.get(categoria)
-        tipos= cabeca.prever(saida.image_embeds.cpu().numpy()) if cabeca is not None else None
-        previstas= []
-        for i, linha in enumerate(probabilidades):
+        melhores= []
+        alternativas= []
+        for linha in probabilidades:
             somas= defaultdict(float)
             for classe, probabilidade in zip(ids, linha, strict=True):
                 somas[classe]+= probabilidade
             melhor= max(somas, key=somas.get)
+            melhores.append((melhor, somas[melhor]))
+            reais= {c: v for c, v in somas.items() if c is not None}
+            alternativas.append(max(reais, key=reais.get) if reais else None)
+        cabeca= self.cabecas.get(categoria)
+        tipos= None
+        if cabeca is not None:
+            confirmar= self.confirmar.get(categoria, set())
+            origens= origens or [None] * len(recortes)
+            excluir= [confirmar - {melhor, origem} for (melhor, _), origem in zip(melhores, origens, strict=True)]
+            tipos= cabeca.prever(saida.image_embeds.cpu().numpy(), excluir)
+        previstas= []
+        for i, (melhor, probabilidade) in enumerate(melhores):
+            alternativa= tipos[i][0] if tipos is not None else alternativas[i]
             if tipos is not None and melhor is not None:
-                previstas.append(tipos[i])
+                previstas.append((*tipos[i], alternativa))
             else:
-                previstas.append((melhor, somas[melhor]))
+                previstas.append((melhor, probabilidade, alternativa))
         return previstas
 
 
@@ -121,12 +143,19 @@ class DuasFases:
         resultado= list(detecoes)
         descartadas= set()
         for categoria, itens in por_categoria.items():
-            previstas= self.refinador.classificar(categoria, [recorte for _, recorte in itens])
-            for (posicao, _), (classe, probabilidade) in zip(itens, previstas, strict=True):
+            previstas= self.refinador.classificar_detalhado(
+                categoria, [recorte for _, recorte in itens], [detecoes[posicao].class_name for posicao, _ in itens]
+            )
+            for (posicao, _), (classe, probabilidade, alternativa) in zip(itens, previstas, strict=True):
                 if probabilidade < self.refinador.limiar:
                     continue
                 if classe is None:
-                    descartadas.add(posicao)
+                    descarte= self.classes.categorias[categoria].limiar_descarte
+                    if descarte is None or probabilidade >= descarte:
+                        descartadas.add(posicao)
+                    elif alternativa is not None:
+                        # Kept although a negative text won: give it the best real type, keep its confidence.
+                        resultado[posicao]= replace(detecoes[posicao], class_name=alternativa)
                     continue
                 original= detecoes[posicao]
                 combinar= self.classes.categorias[original.category].combinar_confianca

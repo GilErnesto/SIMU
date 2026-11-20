@@ -1,0 +1,8 @@
+# Zona de treino (pseudo-etiquetas, ronda 2): longe das zonas de teste (>300 m).
+nome: Aveiro
+bbox:
+  lon_min: -8.6400
+  lat_min: 40.6480
+  lon_max: -8.6250
+  lat_max: 40.6620
+crs_metrico: EPSG:3763

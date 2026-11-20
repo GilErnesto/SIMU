@@ -1,0 +1,8 @@
+# Zona de treino (batch 3): fora das zonas de teste e de afinação.
+nome: Aveiro
+bbox:
+  lon_min: -8.6500
+  lat_min: 40.6200
+  lon_max: -8.6380
+  lat_max: 40.6330
+crs_metrico: EPSG:3763

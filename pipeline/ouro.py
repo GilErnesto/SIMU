@@ -22,8 +22,10 @@ import cv2
 
 from pipeline import checkpoint
 from pipeline.config import Classes, load_classes
+from pipeline.detect.ladrilhos import detetar_com_ladrilhos
 from pipeline.detect.panorama import views
 from pipeline.errors import ErroPipeline
+from pipeline.run import pesos_padrao
 
 PASTA= Path("data/ouro")
 CATEGORIAS= ("sinal",)
@@ -56,41 +58,6 @@ def _proposta(detecao, classes: Classes) -> dict:
     }
 
 
-LADO_LADRILHO= 1024
-PASSO_LADRILHO= 768
-MINIMO_PARA_LADRILHAR= 1300
-
-
-def _inicios(total: int, lado: int, passo: int) -> list[int]:
-    if total <= lado:
-        return [0]
-    return [*range(0, total - lado, passo), total - lado]
-
-
-def detetar_com_ladrilhos(detetor, nome: str, imagem) -> list:
-    """Whole image plus overlapping native-resolution tiles, merged.
-
-    The detector was trained at about 1024 px, so on a 2048 px photo small signs end up tiny.
-    Tiles keep them at full size; duplicates between tiles and the whole image are merged.
-    """
-    from pipeline.detect.panorama import nms
-    from pipeline.models import Detection
-
-    altura, largura= imagem.shape[:2]
-    deteccoes= list(detetor.detect(nome, imagem))
-    if max(altura, largura) < MINIMO_PARA_LADRILHAR:
-        return deteccoes
-    for y in _inicios(altura, LADO_LADRILHO, PASSO_LADRILHO):
-        for x in _inicios(largura, LADO_LADRILHO, PASSO_LADRILHO):
-            for d in detetor.detect(nome, imagem[y : y + LADO_LADRILHO, x : x + LADO_LADRILHO]):
-                x1, y1, x2, y2= d.bbox_xyxy
-                caixa= (x1 + x, y1 + y, x2 + x, y2 + y)
-                deteccoes.append(
-                    Detection(nome, d.category, d.class_name, caixa, d.confidence, d.obstruido)
-                )
-    return nms(deteccoes, 10**9)
-
-
 def _guardar_atomico(caminho: Path, dados: dict) -> None:
     caminho.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
@@ -119,8 +86,15 @@ def preparar(args: argparse.Namespace) -> int:
     }
     planos= [i for i, r in disponiveis.items() if r.camera_type != "spherical"]
     panoramas= [i for i, r in disponiveis.items() if r.camera_type == "spherical"]
-    escolhidas= escolher(planos, args.n_perspetiva, args.semente) + escolher(
-        panoramas, args.n_panoramas, args.semente
+    raras= set(args.raras)
+    com_raras= [i for i in planos if any(d.class_name in raras for d in registos[i][1])]
+    quantas_raras= round(args.n_perspetiva * 0.7) if raras else 0
+    primeiras= escolher(com_raras, quantas_raras, args.semente)
+    resto= [i for i in planos if i not in set(primeiras)]
+    escolhidas= (
+        primeiras
+        + escolher(resto, args.n_perspetiva - len(primeiras), args.semente)
+        + escolher(panoramas, args.n_panoramas, args.semente)
     )
     if not escolhidas:
         raise ErroPipeline("No images available: check --checkpoint and --imagens")
@@ -310,10 +284,16 @@ def main(argv: list[str] | None= None) -> int:
     prep.add_argument("--imagens", default="data/avaliacao/imagens", help="anonymised images")
     prep.add_argument("--saida", default=str(PASTA))
     prep.add_argument("--classes", default="config/classes.yaml")
-    prep.add_argument("--pesos", default="models/detetor.pt")
+    prep.add_argument("--pesos", default=pesos_padrao())
     prep.add_argument("--cabeca-sinal", default="models/tipo_sinal.npz")
     prep.add_argument("--n-perspetiva", type=int, default=80)
     prep.add_argument("--n-panoramas", type=int, default=40)
+    prep.add_argument(
+        "--raras",
+        nargs="*",
+        default=[],
+        help="classes to favour: 70%% of the perspective photos come from images where the detector proposed one",
+    )
     prep.add_argument("--semente", type=int, default=0)
     prep.add_argument("--categorias", nargs="+", default=list(CATEGORIAS), help="categories to propose")
     prep.add_argument("--refazer", action="store_true", help="replace an existing ouro.json")
@@ -329,9 +309,15 @@ def main(argv: list[str] | None= None) -> int:
     aval.add_argument("--saida", default=str(PASTA))
     aval.add_argument("--classes", default="config/classes.yaml")
     aval.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
-    aval.add_argument("--pesos", default="models/detetor.pt")
+    aval.add_argument("--pesos", default=pesos_padrao())
     aval.add_argument("--cabeca-sinal", default="models/tipo_sinal.npz")
     aval.add_argument("--sem-refinar", action="store_true")
+    aval.add_argument("--ladrilhos", action="store_true", help="also detect on 1024 px tiles of big photos")
+    aval.add_argument(
+        "--degradar",
+        choices=("desfocada", "movimento", "escura", "jpeg", "metade"),
+        help="degrade every photo first (robustness run; give it its own --nome)",
+    )
     aval.add_argument("--refazer", action="store_true", help="run the detector again")
     args= parser.parse_args(argv)
     try:

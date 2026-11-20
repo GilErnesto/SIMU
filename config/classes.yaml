@@ -10,33 +10,68 @@ categorias:
     rotulo: Sinais
     raio_dedup_m: 5
     altura_m: 0.7
-    limiar_detecao: 0.3
+    # 0.40 com o conjunto de quatro detetores (models/detetor.pt, detetor_b23.pt, detetor_b23_1280.pt,
+    # detetor_b23p_1280.pt), aumento em teste, a cabeça atual e limiar_descarte 0.7:
+    # no conjunto de ouro dá precisão ~0.97 com recall ~0.69.
+    limiar_detecao: 0.40
+    # O CLIP só deita fora uma caixa (ganhou um texto negativo) com probabilidade >= 0.7; abaixo disso
+    # a caixa fica com o melhor tipo real. Com o limiar antigo (0.3) perdiam-se ~30 sinais pequenos.
+    limiar_descarte: 0.7
     limiar_especifica: 0.5
+    # Categorias oficiais do Regulamento de Sinalização do Trânsito (ver invicta.pt/codigo).
+    # stop e limite_velocidade são subtipos de cedencia e proibicao (superclasse).
+    # As categorias novas (prescricao, pre_sinalizacao, direcao, confirmacao, localidades,
+    # complementares, painel_adicional, turistico, temporaria) não têm descrição para o CLIP:
+    # no conjunto de ouro, textos para elas deixavam passar placas de porta e montras
+    # (mais falsos alarmes, menos tipos certos). Servem para rotular à mão e para treinar a cabeça.
     classes:
-      - stop
-      - cedencia
-      - limite_velocidade
-      - proibicao
       - perigo
+      - cedencia
+      - stop
+      - proibicao
+      - limite_velocidade
       - obrigacao
+      - prescricao
       - informacao
+      - pre_sinalizacao
+      - direcao
+      - confirmacao
+      - localidades
+      - complementares
+      - painel_adicional
+      - turistico
+      - temporaria
       - semaforo
       - outro
     gerais:
       - outro
     rotulos:
-      stop: Stop
+      perigo: Sinais de perigo
       cedencia: Cedência de passagem
-      limite_velocidade: Limite de velocidade
+      stop: Cedência de passagem (STOP)
       proibicao: Proibição
-      perigo: Perigo
+      limite_velocidade: Proibição (limite de velocidade)
       obrigacao: Obrigação
+      prescricao: Prescrição específica
       informacao: Informação
-      semaforo: Semáforo
+      pre_sinalizacao: Pré-sinalização
+      direcao: Direção
+      confirmacao: Confirmação
+      localidades: Localidades
+      complementares: Complementares
+      painel_adicional: Painel adicional
+      turistico: Turístico-cultural
+      temporaria: Sinalização temporária
+      semaforo: Sinalização luminosa (semáforo)
       outro: Sinal por classificar
     superclasse:
+      stop: cedencia
       limite_velocidade: proibicao
     superclasse_padrao: outro
+    # A cabeça treinada inventava semáforos em sinais genéricos: só pode dizer semaforo
+    # se o zero-shot do CLIP também o escolher ou o detetor já tiver dito semaforo.
+    exigem_confirmacao:
+      - semaforo
     consultas:
       outro: a traffic sign
       semaforo: a traffic light

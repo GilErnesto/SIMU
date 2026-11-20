@@ -1,0 +1,11 @@
+# Detector fine-tune on reviewed batches 2+3 (never the batch-1 test set).
+dados: data/datasets/b23/data.yaml
+modelo: models/detetor_original.pt
+epocas: 60
+imgsz: 1280
+lote: 4
+paciencia: 15
+trabalhadores: 2
+nome: b23_1280
+destino: data/treino/b23_1280_detetor.pt
+graficos: false  # matplotlib's native modules are blocked by App Control here

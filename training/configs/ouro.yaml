@@ -3,7 +3,7 @@ dados: data/datasets/ouro/data.yaml
 modelo: models/detetor.pt
 epocas: 40
 imgsz: 1024
-lote: 6
+lote: 8
 paciencia: 12
 trabalhadores: 4
 nome: ouro
