@@ -1,30 +1,43 @@
-import { indiceCategoria, percentagem, rotuloCategoria, rotuloClasse, rotuloEstado } from "./rotulos.js";
+import { percentagem, rotuloCategoria, rotuloClasse, rotuloEstado } from "./rotulos.js";
+import Simbolo from "./Simbolo.jsx";
 
 const LIMITE= 300;
 
 function Legenda({ config }) {
-  const categorias= Object.keys(config.categorias);
+  const sinais= config.categorias.sinal?.classes ?? [];
   return (
     <details className="legenda">
       <summary>Legenda do mapa</summary>
       <ul className="legenda__lista">
-        {categorias.map((nome) => (
-          <li key={nome}>
-            <span className={`pino pino--legenda pino--c${indiceCategoria(config, nome)} pino--auto`} aria-hidden="true" />
-            {rotuloCategoria(config, nome)}
+        {config.categorias.iluminacao && (
+          <li>
+            <Simbolo categoria="iluminacao" classe="luz" />
+            {rotuloCategoria(config, "iluminacao")}: lâmpada
+          </li>
+        )}
+        {config.categorias.residuos && (
+          <li>
+            <Simbolo categoria="residuos" classe="contentor" />
+            {rotuloCategoria(config, "residuos")}: caixote do lixo
+          </li>
+        )}
+        {sinais.map((classe) => (
+          <li key={classe.id}>
+            <Simbolo categoria="sinal" classe={classe.id} />
+            {classe.rotulo}
           </li>
         ))}
         <li>
-          <span className="pino pino--legenda pino--c0 pino--rejeitado" aria-hidden="true" />
-          Contorno tracejado: rejeitado
+          <Simbolo categoria="iluminacao" classe="luz" estado="validado" />
+          Selo verde: validado
         </li>
         <li>
-          <span className="pino pino--legenda pino--c0 pino--validado" aria-hidden="true" />
-          Centro branco: validado
+          <Simbolo categoria="iluminacao" classe="luz" estado="corrigido" />
+          Selo laranja com barra: corrigido
         </li>
         <li>
-          <span className="pino pino--legenda pino--c0 pino--corrigido" aria-hidden="true" />
-          Barra branca: corrigido
+          <Simbolo categoria="iluminacao" classe="luz" estado="rejeitado" />
+          Esbatido e tracejado: rejeitado
         </li>
         <li>Sem posição: só aparece na lista, não no mapa</li>
       </ul>
@@ -96,7 +109,7 @@ export default function ListaElementos({
                   aria-current={ativo ? "true" : undefined}
                   onClick={() => aoSelecionar(p.id, "lista")}
                 >
-                  <span className={`pino pino--legenda pino--c${indiceCategoria(config, p.categoria)} pino--${p.estado}`} aria-hidden="true" />
+                  <Simbolo categoria={p.categoria} classe={p.classe} estado={p.estado} />
                   <span className="item__texto">
                     <span className="item__nome">{rotuloClasse(config, p.categoria, p.classe)}</span>
                     <span className="item__meta">

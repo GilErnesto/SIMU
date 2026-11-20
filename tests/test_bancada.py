@@ -3,7 +3,13 @@ import io
 import cv2
 import numpy as np
 
-from pipeline.bancada import amostrar, elementos_geojson, imagens_do_mapillary, imagens_geojson
+from pipeline.bancada import (
+    amostrar,
+    elementos_geojson,
+    imagens_do_mapillary,
+    imagens_geojson,
+    so_estas,
+)
 from pipeline.catalog.write import element_confidence
 from pipeline.errors import ErroPipeline
 from pipeline.models import Detection, Element, ImageRecord, Observation
@@ -24,6 +30,11 @@ def test_elementos_geojson_usa_a_formula_de_confianca_do_catalogo():
     assert propriedades["categoria"] == "sinal"
     assert propriedades["n_observacoes"] == 2
     assert propriedades["confianca"] == element_confidence(0.7, 2)
+
+
+def test_so_estas_filtra_pelos_ids_pedidos_e_ordena():
+    registos= [_imagem(f"{n:03d}") for n in range(10)]
+    assert [r.id_fonte for r in so_estas(registos, {"007", "002", "999"})] == ["002", "007"]
 
 
 def test_amostrar_e_estavel_quando_a_listagem_muda():

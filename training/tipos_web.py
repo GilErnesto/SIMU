@@ -250,7 +250,7 @@ def main(argv: list[str] | None= None) -> int:
         default=[],
         help="batches labelled before the official categories: only their stable classes are used",
     )
-    parser.add_argument("--antiga", default="models/tipo_sinal_original.npz", help="head trained on Mapillary")
+    parser.add_argument("--antiga", help="head to mix the new one with; without it the new head is saved alone")
     parser.add_argument("--destino", default="data/treino/tipo_sinal_web.npz")
     parser.add_argument("--classes", default="config/classes.yaml")
     parser.add_argument("--exemplos", help="save a sheet of augmented crops here, to look at")
@@ -271,7 +271,7 @@ def main(argv: list[str] | None= None) -> int:
         if cache is not None:
             np.savez(cache, X=X, y=np.array(y))
     nova= treinar(X, y, REGULARIZACAO)
-    final= misturar(Cabeca.carregar(Path(args.antiga)), nova, args.peso)
+    final= misturar(Cabeca.carregar(Path(args.antiga)), nova, args.peso) if args.antiga else nova
     final.guardar(Path(args.destino))
     print(f"{len(y)} exemplos; classes: {', '.join(final.classes)}")
     print(f"Cabeça guardada em {args.destino}")

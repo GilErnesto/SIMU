@@ -47,7 +47,6 @@ def pesos_padrao() -> str:
 
 CABECA_ILUMINACAO= "models/tipo_iluminacao.npz"
 CABECA_RESIDUOS= "models/tipo_residuos.npz"
-# categoria -> (atributo em args, caminho por omissão)
 CABECAS= {
     "sinal": ("cabeca_sinal", CABECA_SINAL),
     "iluminacao": ("cabeca_iluminacao", CABECA_ILUMINACAO),
@@ -129,8 +128,6 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
         cabecas= _cabecas(args)
         ficheiros.extend(cabecas.values())
         refinador= Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas)
-        # Each ensemble member is refined on its own, then they are merged: on the gold set this beat
-        # merging the raw boxes first (the type check lowers odd boxes before they are averaged).
         membros= [DuasFases(membro, refinador, classes) for membro in membros]
         if outras is not None:
             outras= DuasFases(outras, refinador, classes)

@@ -1,10 +1,12 @@
 import L from "leaflet";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 
-import { indiceCategoria, percentagem, rotuloClasse, rotuloEstado } from "./rotulos.js";
+import CamadaMapa from "./CamadaMapa.jsx";
+import { percentagem, rotuloClasse, rotuloEstado } from "./rotulos.js";
+import { svgSimbolo } from "./simbolos.js";
 
 function iconeGrupo(grupo) {
   const total= grupo.getChildCount();
@@ -19,9 +21,12 @@ function iconeGrupo(grupo) {
 
 function icone(indice, estado, ativo, duplicado, problema) {
   const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}${problema ? " pino--com-reporte" : ""}`;
+
+function icone(categoria, classe, estado, ativo, duplicado) {
+  const classes= `pino pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}`;
   return L.divIcon({
     className: "pino-caixa",
-    html: `<span class="${classes}"></span>`,
+    html: `<span class="${classes}">${svgSimbolo(categoria, classe, estado)}</span>`,
     iconSize: [44, 44],
     iconAnchor: [22, 22],
   });
@@ -133,12 +138,7 @@ export default function Mapa({
 
   return (
     <MapContainer bounds={limites} className="mapa__area" maxZoom={20}>
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        maxNativeZoom={19}
-        maxZoom={20}
-      />
+      <CamadaMapa />
       <AjustarTamanho vista={vista} />
       <AjustarVista features={comPosicao} bbox={config.bbox} />
       <Foco alvo={foco} />

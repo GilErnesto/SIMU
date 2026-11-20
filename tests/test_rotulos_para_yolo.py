@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 
 import cv2
 import numpy as np
@@ -82,6 +83,14 @@ def test_divisao_do_mesmo_troco_e_estavel():
     assert exportador.divisao_de(a, False) == exportador.divisao_de(b, False)
 
 
+def test_divisao_por_imagem_separa_imagens_do_mesmo_troco():
+    registos= [{"id": str(i), "lat": 40.62931, "lon": -8.64801} for i in range(60)]
+    por_troco= {exportador.divisao_de(r, False) for r in registos}
+    por_imagem= {exportador.divisao_de(r, False, True) for r in registos}
+    assert len(por_troco) == 1
+    assert por_imagem == {"train", "val"}
+
+
 def test_caixa_na_vista_inverte_to_panorama():
     largura, altura, yaw= 4096, 2048, 120.0
     original= (400.0, 300.0, 460.0, 600.0)
@@ -123,6 +132,14 @@ def test_lote_de_residuos_usa_caixas_manuais_e_ignora_pseudo_de_residuos(tmp_pat
     assert classes == [exportador.NOMES.index("outro"), exportador.CLASSE_LUZ, exportador.CLASSE_CONTENTOR]
     assert len(list((saida / "recortes" / "val" / "ilha_reciclagem").glob("*.jpg"))) == 1
     assert len(list((saida / "recortes" / "val" / "nao_residuo").glob("*.jpg"))) == 1
+
+
+def test_residuo_outro_conta_como_contentor_mas_nao_gera_recorte_de_tipo(tmp_path):
+    imagem= np.full((300, 400, 3), 120, np.uint8)
+    registo= {"caixas": [{"bbox": [100, 100, 200, 200], "classe": "residuo_outro"}]}
+    exportador.exportar_recortes(imagem, registo, "l", "1", "train", tmp_path, Counter())
+    assert not (tmp_path / "recortes").exists()
+    assert exportador.MANUAIS_YOLO["residuo_outro"] == exportador.CLASSE_CONTENTOR
 
 
 def test_rotulos_sem_categoria_sao_de_luzes():

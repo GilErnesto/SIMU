@@ -30,7 +30,9 @@ MANUAIS_YOLO= {
     "papeleira": CLASSE_CONTENTOR,
     "subterraneo": CLASSE_CONTENTOR,
     "contentor": CLASSE_CONTENTOR,
+    "residuo_outro": CLASSE_CONTENTOR,
 }
+SEM_RECORTE_DE_TIPO= frozenset({"residuo_outro"})
 # Rótulos gravados antes de o rotular.py guardar a categoria eram todos de luzes.
 CATEGORIA_PADRAO= "iluminacao"
 DELTA_MAX_GRAUS= 80.0
@@ -43,11 +45,11 @@ def identidade(imagem):
     return imagem
 
 
-def divisao_de(registo: dict, reservado: bool) -> str:
+def divisao_de(registo: dict, reservado: bool, por_imagem: bool= False) -> str:
     if reservado:
         return "val"
     lat, lon= registo.get("lat"), registo.get("lon")
-    if lat is None or lon is None:
+    if por_imagem or lat is None or lon is None:
         chave= str(registo["id"])
     else:
         chave= f"{round(lat / CELULA_GRAUS)}:{round(lon / CELULA_GRAUS)}"
@@ -151,6 +153,8 @@ def caixas_da_imagem(registo: dict, pseudo: list[tuple[str, int, list[float]]]) 
 
 def exportar_recortes(imagem, registo: dict, lote: str, id_fonte: str, divisao: str, saida: Path, contagem: Counter) -> None:
     for n, caixa in enumerate(registo["caixas"]):
+        if caixa["classe"] in SEM_RECORTE_DE_TIPO:
+            continue
         recorte= recortar(imagem, caixa["bbox"])
         if recorte is None:
             contagem["recorte_pequeno"]+= 1
@@ -185,6 +189,7 @@ def exportar(
     reservados: set[str],
     saida: Path,
     limites: dict[str, int] | None= None,
+    por_imagem: bool= False,
 ) -> Counter:
     contagem= Counter()
     limites= limites or {}
@@ -199,7 +204,7 @@ def exportar(
             if imagem is None:
                 contagem["imagem_em_falta"]+= 1
                 continue
-            divisao= divisao_de(registo, lote in reservados)
+            divisao= divisao_de(registo, lote in reservados, por_imagem)
             exportar_recortes(imagem, registo, lote, id_fonte, divisao, saida, contagem)
             caixas= caixas_da_imagem(registo, pseudo.get(id_fonte, []))
             if registo.get("camera_type") == "spherical":
@@ -226,11 +231,12 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--lotes", nargs="+", required=True)
     parser.add_argument("--reservar", nargs="*", default=[], help="lotes só para validação")
     parser.add_argument("--limite", nargs="*", default=[], help="lote:N, usa só as primeiras N imagens rotuladas")
+    parser.add_argument("--por-imagem", action="store_true", help="divide treino e validação por imagem e não por troço de rua")
     parser.add_argument("--base", default=str(BASE_PADRAO))
     parser.add_argument("--saida", default="data/datasets/luz_aveiro", help="para resíduos, por exemplo data/datasets/residuos_aveiro")
     args= parser.parse_args(argv)
     saida= Path(args.saida)
-    contagem= exportar(Path(args.base), args.lotes, set(args.reservar), saida, ler_limites(args.limite))
+    contagem= exportar(Path(args.base), args.lotes, set(args.reservar), saida, ler_limites(args.limite), args.por_imagem)
     escrever_data_yaml(saida, NOMES)
     for chave in sorted(contagem):
         print(f"{chave}: {contagem[chave]}")
