@@ -11,7 +11,7 @@ A aplicação deteta mobiliário urbano em imagens de rua (sinais de trânsito, 
 
 ## Arranque rápido (Docker)
 
-Requisitos: Docker. Para a GPU, uma placa NVIDIA e o `nvidia-container-toolkit` com CDI (`nvidia-ctk cdi list` deve mostrar `nvidia.com/gpu=all`).
+Requisitos: Docker. Para a GPU, uma placa NVIDIA e, no Linux, o `nvidia-container-toolkit` (`docker run --rm --gpus all ubuntu nvidia-smi` deve mostrar a placa); no Windows basta o Docker Desktop com WSL2 e o controlador NVIDIA.
 
 ```bash
 cp .env.example .env

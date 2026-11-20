@@ -51,3 +51,17 @@ class Conjunto:
 
     def detect(self, image_id: str, image: np.ndarray) -> list[Detection]:
         return juntar([detetor.detect(image_id, image) for detetor in self.detetores])
+
+
+class PorCategoria:
+    """Some categories from one detector, the rest from another."""
+
+    def __init__(self, principal, outras, categorias_principal: frozenset[str]):
+        self.principal= principal
+        self.outras= outras
+        self.categorias_principal= categorias_principal
+
+    def detect(self, image_id: str, image: np.ndarray) -> list[Detection]:
+        return [d for d in self.principal.detect(image_id, image) if d.category in self.categorias_principal] + [
+            d for d in self.outras.detect(image_id, image) if d.category not in self.categorias_principal
+        ]

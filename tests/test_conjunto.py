@@ -55,3 +55,22 @@ def test_pesos_padrao_so_inclui_o_segundo_detetor_se_existir(tmp_path, monkeypat
     assert run.pesos_padrao() == str(principal)
     extra.write_bytes(b"x")
     assert run.pesos_padrao() == f"{principal},{extra}"
+
+
+def test_por_categoria_takes_signs_from_one_detector_and_the_rest_from_the_other():
+    from pipeline.detect.conjunto import PorCategoria
+
+    class Fixo:
+        def __init__(self, detecoes):
+            self.detecoes= detecoes
+
+        def detect(self, image_id, image):
+            return self.detecoes
+
+    def d(categoria, classe):
+        return Detection("img", categoria, classe, (0, 0, 10, 10), 0.9, False)
+
+    principal= Fixo([d("sinal", "stop"), d("iluminacao", "luz")])
+    outras= Fixo([d("sinal", "perigo"), d("iluminacao", "poste_luz"), d("residuos", "ecoponto")])
+    nomes= [x.class_name for x in PorCategoria(principal, outras, frozenset({"sinal"})).detect("img", None)]
+    assert nomes == ["stop", "poste_luz", "ecoponto"]
