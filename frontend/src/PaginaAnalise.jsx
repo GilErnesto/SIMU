@@ -20,6 +20,7 @@ import { FILTROS_VAZIOS, contarFiltros } from "./Filtros.jsx";
 import Fotos from "./Fotos.jsx";
 import Lateral from "./Lateral.jsx";
 import Mapa from "./Mapa.jsx";
+import Marca from "./Marca.jsx";
 import MenuExportar from "./MenuExportar.jsx";
 import ProgressoDaAnalise from "./ProgressoDaAnalise.jsx";
 import { Ligacao } from "./rota.js";
@@ -355,9 +356,7 @@ export default function PaginaAnalise({ token }) {
 
   const cabecalho= (
     <header className="cabecalho">
-      <Ligacao para="/" className="marca">
-        SIMU
-      </Ligacao>
+      <Marca />
       {analise && (
         <div className="cabecalho__titulo">
           <h1>{analise.nome}</h1>

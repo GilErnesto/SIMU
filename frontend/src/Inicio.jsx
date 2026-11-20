@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { guardar, ler } from "./armazenamento.js";
 import ListaAnalises from "./ListaAnalises.jsx";
+import Marca from "./Marca.jsx";
 import ZonaDeEnvio from "./ZonaDeEnvio.jsx";
 import ZonaNoMapa from "./ZonaNoMapa.jsx";
-import { Ligacao } from "./rota.js";
 
 export default function Inicio() {
   const [versao, setVersao]= useState(0);
@@ -51,9 +51,7 @@ export default function Inicio() {
   return (
     <div className="pagina">
       <header className="cabecalho cabecalho--simples cabecalho--inicio">
-        <Ligacao para="/" className="marca">
-          SIMU
-        </Ligacao>
+        <Marca />
       </header>
       <div className="faixa-tecnico">
         <label htmlFor="tecnico-inicio">Técnico</label>

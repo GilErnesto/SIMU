@@ -101,7 +101,7 @@ export default function Avaliar({
           <h2 id="titulo-avaliar" className="painel__titulo" ref={titulo} tabIndex={-1}>
             Avaliar: {rotuloClasse(config, p.categoria, p.classe)}
           </h2>
-          <p className="nota">Estado atual: {rotuloEstado(p.estado)}.</p>
+          <p className="nota">Elemento n.º {p.id}. Estado atual: {rotuloEstado(p.estado)}.</p>
         </div>
         <button type="button" className="botao botao--icone avaliar__fechar" aria-label="Fechar a avaliação" onClick={aoFechar}>
           <IconeFechar />

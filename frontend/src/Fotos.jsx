@@ -180,7 +180,7 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
         </h2>
         {p && (
           <p className="fotos__sub">
-            {rotuloCategoria(config, p.categoria)}, {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}, {total}{" "}
+            n.º {p.id}, {rotuloCategoria(config, p.categoria)}, {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}, {total}{" "}
             {total === 1 ? "fotografia" : "fotografias"}
           </p>
         )}

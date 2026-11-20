@@ -236,6 +236,12 @@ export default function ZonaNoMapa({ aoFechar, aoEnviar }) {
             Zona de cerca de {arredondarMetros(dimensoes.largura)} m por {arredondarMetros(dimensoes.altura)} m
           </p>
         )}
+        {zona && dimensoes && !grande && (
+          <p className="nota">
+            Cada 100 imagens demoram cerca de 3 minutos. Zonas com mais de 1500 imagens são recusadas: em ruas densas
+            escolha uma área pequena (cerca de 300 m de lado).
+          </p>
+        )}
         {grande && (
           <p className="mensagem mensagem--erro" role="status">
             A zona é grande demais: no máximo cerca de 2 km de lado.
