@@ -21,8 +21,14 @@ from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.models import Element, ImageRecord
-from pipeline.run import CABECA_ILUMINACAO, CABECA_RESIDUOS, CABECA_SINAL, _detetor
-from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de,pesos_padrao
+from pipeline.run import (
+    CABECA_ILUMINACAO,
+    CABECA_RESIDUOS,
+    CABECA_SINAL,
+    _detetor,
+    inclinadas_de,
+    pesos_padrao,
+)
 
 RAIO_COBERTURA_M= 30.0
 
