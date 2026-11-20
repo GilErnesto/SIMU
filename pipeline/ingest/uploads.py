@@ -1,5 +1,6 @@
 import bisect
 import math
+import os
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -16,6 +17,21 @@ IMAGENS= {".jpg", ".jpeg", ".png"}
 VIDEOS= {".mp4", ".mov", ".m4v", ".avi", ".webm"}
 GPX= {".gpx"}
 FPS_PADRAO= 2.0
+MAX_IMAGENS_VIDEO= 1500
+
+
+def _limite_video() -> int:
+    try:
+        return int(os.environ.get("MAX_IMAGENS_VIDEO", MAX_IMAGENS_VIDEO))
+    except ValueError:
+        return MAX_IMAGENS_VIDEO
+
+
+def _demasiadas(caminho: Path, fps: float, n: int, limite: int) -> ErroPipeline:
+    return ErroPipeline(
+        f"O vídeo {nome_original(caminho)} geraria {n} imagens a {fps:g} imagens por segundo, mais do que o máximo de "
+        f"{limite} por análise. Reduza as imagens por segundo ou corte o vídeo."
+    )
 LADO_MAXIMO= 2048
 DISTANCIA_MINIMA_M= 0.5
 JANELA_RUMO_S= 1.0
@@ -165,6 +181,11 @@ def extrair_frames(caminho: Path, fps: float, pasta: Path) -> list[tuple[float, 
     if not nativo or not math.isfinite(nativo) or nativo <= 0:
         nativo= 30.0
     passo= max(round(nativo / fps), 1)
+    limite= _limite_video()
+    total= captura.get(cv2.CAP_PROP_FRAME_COUNT)
+    if total and math.isfinite(total) and total > 0 and math.ceil(total / passo) > limite:
+        captura.release()
+        raise _demasiadas(caminho, fps, math.ceil(total / passo), limite)
     pasta.mkdir(parents=True, exist_ok=True)
     frames= []
     indice= 0
@@ -175,6 +196,9 @@ def extrair_frames(caminho: Path, fps: float, pasta: Path) -> list[tuple[float, 
                 ficheiro= pasta / f"{caminho.stem}_{indice:07d}.jpg"
                 cv2.imwrite(str(ficheiro), _reduzir(frame), [cv2.IMWRITE_JPEG_QUALITY, 92])
                 frames.append((indice / nativo, ficheiro))
+                if len(frames) > limite:
+                    captura.release()
+                    raise _demasiadas(caminho, fps, len(frames), limite)
         indice+= 1
     captura.release()
     return frames

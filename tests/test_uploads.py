@@ -159,6 +159,20 @@ def test_extrai_frames_ao_ritmo_pedido(tmp_path):
     assert all(caminho.is_file() for _, caminho in frames)
 
 
+def test_video_com_demasiadas_imagens_e_recusado_sem_extrair(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_VIDEO", "5")
+    video= _video(tmp_path / "longo.avi", frames= 100, fps= 10)
+    with pytest.raises(ErroPipeline, match="geraria 20 imagens a 2 imagens por segundo, mais do que o máximo de 5"):
+        extrair_frames(video, 2.0, tmp_path / "frames")
+    assert not (tmp_path / "frames").exists()
+
+
+def test_video_no_limite_e_aceite(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_VIDEO", "20")
+    video= _video(tmp_path / "curto.avi", frames= 100, fps= 10)
+    assert len(extrair_frames(video, 2.0, tmp_path / "frames")) == 20
+
+
 def test_video_que_nao_abre(tmp_path):
     caminho= tmp_path / "x.mp4"
     caminho.write_bytes(b"nada")

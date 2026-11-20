@@ -2,6 +2,8 @@ import io
 import os
 from pathlib import Path
 
+import cv2
+import numpy as np
 import pytest
 from PIL import Image
 from pyproj import Transformer
@@ -134,6 +136,20 @@ def test_sem_imagens_utilizaveis_falha_e_guarda_os_ficheiros(tmp_path, sessao):
     assert analise.estado == "falhou"
     assert "Nenhuma imagem utilizável" in analise.erro
     assert pasta.exists()
+
+
+def test_video_longo_demais_falha_com_o_motivo_no_erro(tmp_path, sessao, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_VIDEO", "5")
+    analise= analises.criar(sessao, "Vídeo longo", parametros= {"fps": 2.0})
+    pasta= tmp_path / "raw" / analise.token
+    pasta.mkdir(parents=True)
+    escritor= cv2.VideoWriter(str(pasta / "0001_longo.avi"), cv2.VideoWriter_fourcc(*"MJPG"), 10, (64, 48))
+    for i in range(100):
+        escritor.write(np.full((48, 64, 3), (i * 8) % 255, dtype=np.uint8))
+    escritor.release()
+    assert _executar(tmp_path, sessao, analise) is False
+    assert analise.estado == "falhou"
+    assert "geraria 20 imagens a 2 imagens por segundo" in analise.erro
 
 
 def test_foto_sem_gps_e_analisada_com_aviso_e_elementos_sem_posicao(tmp_path, sessao):
