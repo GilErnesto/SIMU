@@ -71,7 +71,6 @@ services:
       - pipeline.worker
       - --municipio=/app/config/municipio.yaml
       - --egoblur=/app/models/egoblur
-      - --pesos=/app/models/detetor.pt
       - --cabeca-sinal=/app/models/tipo_sinal.npz
       - --raw-dir=/app/data/raw
       - --anon-dir=/app/data/anon

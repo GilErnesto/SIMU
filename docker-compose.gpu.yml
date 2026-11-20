@@ -1,7 +1,14 @@
+# GPU worker, on Linux (nvidia-container-toolkit) and on Windows (Docker Desktop with WSL2).
+# Use: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 services:
   worker:
     build:
       args:
         TORCH_INDEX: ""
-    devices:
-      - nvidia.com/gpu=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
