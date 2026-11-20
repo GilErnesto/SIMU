@@ -67,6 +67,7 @@ def cenario(monkeypatch, tmp_path):
     anon= tmp_path / "anon"
     anon.mkdir()
     cv2.imwrite(str(anon / "perspetiva.jpg"), np.full((300, 400, 3), 128, np.uint8))
+    cv2.imwrite(str(anon / "panorama.jpg"), np.full((512, 1024, 3), 90, np.uint8))
     engine= create_engine(URL_BD)
     ensure_schema(engine)
     with Session(engine) as sessao:
@@ -74,7 +75,7 @@ def cenario(monkeypatch, tmp_path):
         sessao.add(analise)
         sessao.flush()
         perspetiva= imagem(sessao, analise, "perspective", "perspetiva.jpg")
-        panoramica= imagem(sessao, analise, "spherical", None)
+        panoramica= imagem(sessao, analise, "spherical", "panorama.jpg")
         elemento(sessao, analise, perspetiva, "candeeiro", "validado", [20, 20, 120, 140])
         b= elemento(sessao, analise, perspetiva, "poste_luz", "corrigido", [150, 20, 250, 140], classe_obs="luz")
         sessao.add(Correcao(elemento_id=b.id, campo="classe", valor_antigo="luz", valor_novo="poste_luz", autor="tecnica"))
@@ -82,7 +83,8 @@ def cenario(monkeypatch, tmp_path):
         elemento(sessao, analise, perspetiva, "luz", "auto", [150, 150, 250, 290])
         e= elemento(sessao, analise, perspetiva, "luz", "corrigido", [280, 20, 380, 140])
         sessao.add(Correcao(elemento_id=e.id, campo="posicao", valor_antigo=None, valor_novo="40.64,-8.65", autor="tecnica"))
-        elemento(sessao, analise, panoramica, "candeeiro", "validado", [10, 10, 50, 50])
+        elemento(sessao, analise, panoramica, "candeeiro", "validado", [500, 200, 540, 330])
+        elemento(sessao, analise, panoramica, "candeeiro", "validado", [10, 10, 30, 30])
         sessao.commit()
         token= analise.token
         posicao_e= to_shape(e.geom)
@@ -115,10 +117,10 @@ def recortes(saida, classe) -> list:
 def test_recortes_so_das_classes_revistas_e_dos_negativos(cenario, tmp_path):
     codigo, saida, _ = correr(cenario, tmp_path)
     assert codigo == 0
-    assert len(recortes(saida, "candeeiro")) == 1
+    assert len(recortes(saida, "candeeiro")) == 2
     assert len(recortes(saida, "poste_luz")) == 1
     assert len(recortes(saida, "nao_luz")) == 1
-    assert sorted(p.parent.name for p in saida.glob("recortes/*/*/*.jpg")) == ["candeeiro", "nao_luz", "poste_luz"]
+    assert sorted(p.parent.name for p in saida.glob("recortes/*/*/*.jpg")) == ["candeeiro", "candeeiro", "nao_luz", "poste_luz"]
 
 
 @precisa_bd
@@ -129,9 +131,20 @@ def test_caminho_absoluto_do_contentor_resolve_se_em_anon_dir(cenario, tmp_path)
     engine.dispose()
     codigo, saida, _ = correr(cenario, tmp_path)
     assert codigo == 0
-    assert len(recortes(saida, "candeeiro")) == 1
+    assert len(recortes(saida, "candeeiro")) == 2
     assert len(recortes(saida, "poste_luz")) == 1
     assert len(recortes(saida, "nao_luz")) == 1
+
+
+@precisa_bd
+def test_panorama_sem_ficheiro_ou_fora_das_vistas_nao_gera_recorte(cenario, tmp_path):
+    engine= create_engine(URL_BD)
+    with engine.begin() as ligacao:
+        ligacao.execute(text("UPDATE imagem SET caminho_anon= 'nao_existe.jpg' WHERE camera_type= 'spherical'"))
+    engine.dispose()
+    codigo, saida, _= correr(cenario, tmp_path)
+    assert codigo == 0
+    assert len(recortes(saida, "candeeiro")) == 1
 
 
 @precisa_bd

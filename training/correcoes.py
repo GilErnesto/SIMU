@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from pipeline.catalog.write import Base, Correcao, Elemento, Observacao
 from pipeline.config import load_classes
+from pipeline.detect.panorama import LADO_VISTA, views
 from pipeline.errors import ErroPipeline
+from training.rotulos_para_yolo import caixa_na_vista
 from training.tipos import QUALIDADE_JPEG, divisao_de, recortes_de
 
 NEGATIVOS= {"iluminacao": "nao_luz"}
@@ -52,6 +54,23 @@ def _campos(sessao: Session) -> dict[int, set[str]]:
     return campos
 
 
+def _recorte_do_panorama(vistas: list, bbox: list[float], largura: int, altura: int, classe: str):
+    melhor= None
+    for yaw, vista in vistas:
+        mapeada= caixa_na_vista(tuple(bbox), yaw, largura, altura, LADO_VISTA)
+        if mapeada is None:
+            continue
+        area= (mapeada[2] - mapeada[0]) * (mapeada[3] - mapeada[1])
+        if melhor is None or area > melhor[0]:
+            melhor= (area, vista, mapeada)
+    if melhor is None:
+        return None
+    _, vista, (a, b, c, d)= melhor
+    itens= [{"caixa": [a / LADO_VISTA, b / LADO_VISTA, c / LADO_VISTA, d / LADO_VISTA], "classe": classe}]
+    recortes= recortes_de(vista, itens)
+    return recortes[0][2] if recortes else None
+
+
 def exportar_recortes(
     elementos: list[Elemento],
     campos: dict[int, set[str]],
@@ -71,19 +90,27 @@ def exportar_recortes(
     contagem= Counter()
     ignorados= Counter()
     for imagem, pares in por_imagem.items():
-        if imagem.camera_type == "spherical":
-            ignorados["panorama"]+= len(pares)
-            continue
         pixels= cv2.imread(str(anon_dir / Path(imagem.caminho_anon).name)) if imagem.caminho_anon else None
         if pixels is None:
             ignorados["ficheiro em falta"]+= len(pares)
             continue
         altura, largura= pixels.shape[:2]
-        itens= [
-            {"caixa": [obs.bbox[0] / largura, obs.bbox[1] / altura, obs.bbox[2] / largura, obs.bbox[3] / altura], "classe": c}
-            for obs, c in pares
-        ]
-        for n, classe, recorte in recortes_de(pixels, itens):
+        if imagem.camera_type == "spherical":
+            vistas= list(views(pixels, LADO_VISTA))
+            recortados= []
+            for n, (obs, classe) in enumerate(pares):
+                recorte= _recorte_do_panorama(vistas, obs.bbox, largura, altura, classe)
+                if recorte is None:
+                    ignorados["panorama fora das vistas"]+= 1
+                else:
+                    recortados.append((n, classe, recorte))
+        else:
+            itens= [
+                {"caixa": [obs.bbox[0] / largura, obs.bbox[1] / altura, obs.bbox[2] / largura, obs.bbox[3] / altura], "classe": c}
+                for obs, c in pares
+            ]
+            recortados= recortes_de(pixels, itens)
+        for n, classe, recorte in recortados:
             destino= saida / "recortes" / divisao_de(imagem.id_fonte) / classe
             destino.mkdir(parents=True, exist_ok=True)
             nome= f"{imagem.fonte}_{imagem.id_fonte}_{pares[n][0].id}.jpg"

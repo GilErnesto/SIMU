@@ -1,0 +1,10 @@
+dados: data/datasets/residuos_reforco/data.yaml
+modelo: models/detetor.pt
+epocas: 12
+tempo: 1.0
+imgsz: 1024
+lote: 6
+paciencia: 5
+trabalhadores: 3
+nome: residuos_reforco
+destino: models/detetor_residuos.pt
