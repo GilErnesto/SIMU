@@ -35,6 +35,10 @@ CABECA_SINAL= "models/tipo_sinal.npz"
 # Ensemble of detectors (see pipeline/detect/conjunto.py); the extra ones are used when present.
 PESOS_PRINCIPAIS= Path("models/detetor.pt")
 PESOS_EXTRA= (Path("models/detetor_b23.pt"), Path("models/detetor_b23_1280.pt"), Path("models/detetor_b23p_1280.pt"))
+# Those weights were fine-tuned on sign-only labels and no longer find lamps or bins: only their signs are
+# kept, and every other category comes from the original detector.
+CATEGORIAS_DOS_PESOS= frozenset({"sinal"})
+PESOS_OUTRAS_CATEGORIAS= Path("models/detetor_original.pt")
 
 
 def pesos_padrao() -> str:
@@ -105,13 +109,15 @@ def _versao(args: argparse.Namespace, classes, ficheiros: list[Path]) -> str:
 
 def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
     ficheiros= []
+    aumentar= not getattr(args, "sem_aumento", False)
+    outras= None
     if tipo_de_detetor(args) == "yolo":
         pesos= lista_de_pesos(args.pesos)
-        membros= [
-            Detector.from_weights(p, classes, limiar=args.limiar, aumentar=not getattr(args, "sem_aumento", False))
-            for p in pesos
-        ]
+        membros= [Detector.from_weights(p, classes, limiar=args.limiar, aumentar=aumentar) for p in pesos]
         ficheiros.extend(pesos)
+        if PESOS_OUTRAS_CATEGORIAS.exists() and PESOS_OUTRAS_CATEGORIAS not in pesos:
+            outras= Detector.from_weights(PESOS_OUTRAS_CATEGORIAS, classes, limiar=args.limiar, aumentar=aumentar)
+            ficheiros.append(PESOS_OUTRAS_CATEGORIAS)
     else:
         from pipeline.detect.owl import OwlDetector
 
@@ -123,12 +129,18 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
         ficheiros.extend(cabecas.values())
         refinador= Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas)
         membros= [DuasFases(membro, refinador, classes) for membro in membros]
+        if outras is not None:
+            outras= DuasFases(outras, refinador, classes)
     if len(membros) == 1:
         detetor= membros[0]
     else:
         from pipeline.detect.conjunto import Conjunto
 
         detetor= Conjunto(membros)
+    if outras is not None:
+        from pipeline.detect.conjunto import PorCategoria
+
+        detetor= PorCategoria(detetor, outras, CATEGORIAS_DOS_PESOS)
     if getattr(args, "ladrilhos", False):
         from pipeline.detect.ladrilhos import Ladrilhos
 
