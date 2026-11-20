@@ -19,11 +19,8 @@ function iconeGrupo(grupo) {
   });
 }
 
-function icone(indice, estado, ativo, duplicado, problema) {
-  const classes= `pino pino--c${indice} pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}${problema ? " pino--com-reporte" : ""}`;
-
-function icone(categoria, classe, estado, ativo, duplicado) {
-  const classes= `pino pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}`;
+function icone(categoria, classe, estado, ativo, duplicado, problema) {
+  const classes= `pino pino--${estado}${ativo ? " pino--ativo" : ""}${duplicado ? " pino--duplicado" : ""}${problema ? " pino--com-reporte" : ""}`;
   return L.divIcon({
     className: "pino-caixa",
     html: `<span class="${classes}">${svgSimbolo(categoria, classe, estado)}</span>`,
@@ -125,7 +122,7 @@ export default function Mapa({
           problema: p.reportes_abertos > 0,
           posicao: [lat, lon],
           titulo: `${nome}, ${rotuloEstado(p.estado)}, confiança ${percentagem(p.confianca)}${duplicado ? ", possível duplicado" : ""}${p.reportes_abertos ? `, ${p.reportes_abertos} problema(s) reportado(s)` : ""}`,
-          icone: icone(indiceCategoria(config, p.categoria), p.estado, p.id === selecionadoId, duplicado, p.reportes_abertos > 0),
+          icone: icone(p.categoria, p.classe, p.estado, p.id === selecionadoId, duplicado, p.reportes_abertos > 0),
         };
       }),
     [config, comPosicao, selecionadoId, duplicadosIds],

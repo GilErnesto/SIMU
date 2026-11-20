@@ -1192,3 +1192,27 @@ select {
   }
 }
 
+
+.pino.pino--problema {
+  --cor: var(--erro);
+  width: 22px;
+  height: 22px;
+  background: var(--cor);
+  border: 2px solid #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px var(--tinta);
+  transform: rotate(45deg);
+}
+
+.pino.pino--com-reporte::before {
+  inset: auto;
+  top: -7px;
+  right: -7px;
+  width: 17px;
+  height: 17px;
+  background: var(--erro);
+  border: 1.5px solid #ffffff;
+  border-radius: 50%;
+  font-size: 11px;
+  z-index: 1;
+}
