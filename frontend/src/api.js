@@ -30,7 +30,7 @@ export function obterConfig(sinal) {
   return pedir("/config", { signal: sinal });
 }
 
-function parametrosDe({ analise, categoria, classe, estado, minObservacoes, minConfianca }) {
+function parametrosDe({ analise, categoria, classe, estado, minObservacoes, minConfianca, comReportes }) {
   const parametros= new URLSearchParams();
   if (analise) parametros.set("analise", analise);
   if (categoria) parametros.set("categoria", categoria);
@@ -38,6 +38,7 @@ function parametrosDe({ analise, categoria, classe, estado, minObservacoes, minC
   if (estado) parametros.set("estado", estado);
   if (minObservacoes) parametros.set("min_observacoes", minObservacoes);
   if (minConfianca) parametros.set("min_confianca", minConfianca);
+  if (comReportes) parametros.set("com_reportes", "true");
   const texto= parametros.toString();
   return texto ? `?${texto}` : "";
 }
@@ -134,4 +135,63 @@ export function separarElemento(id, observacoes, autor) {
 
 export function ligacaoExportacao(formato, filtros) {
   return `${BASE}/export.${formato}${parametrosDe(filtros)}`;
+}
+
+// Citizen reports (backend: pipeline/catalog/reportes.py).
+export function criarReporte({ foto, cidadao, lon, lat }) {
+  const corpo= new FormData();
+  corpo.append("foto", foto);
+  corpo.append("cidadao", cidadao);
+  if (Number.isFinite(lon) && Number.isFinite(lat)) {
+    corpo.append("lon", String(lon));
+    corpo.append("lat", String(lat));
+  }
+  return pedir("/reportes", { method: "POST", body: corpo });
+}
+
+export function obterReporte(token, sinal) {
+  return pedir(`/reportes/${encodeURIComponent(token)}`, { signal: sinal });
+}
+
+export function enviarReporte(token, corpo) {
+  return pedir(`/reportes/${encodeURIComponent(token)}/enviar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+}
+
+export function listarReportes(estado, categoria, sinal, analise) {
+  const parametros= new URLSearchParams({ estado });
+  if (categoria) parametros.set("categoria", categoria);
+  if (analise) parametros.set("analise", analise);
+  return pedir(`/reportes?${parametros}`, { signal: sinal });
+}
+
+export function mudarEstadoReporte(token, corpo) {
+  return pedir(`/reportes/${encodeURIComponent(token)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(corpo),
+  });
+}
+
+export function ligacaoReportes(formato) {
+  return `${BASE}/reportes.${formato}`;
+}
+
+export function urlFotoReporte(reporte) {
+  return reporte?.foto ? `${BASE}${reporte.foto}` : null;
+}
+
+export function reportesDoCidadao(cidadao, sinal) {
+  return pedir(`/cidadaos/${encodeURIComponent(cidadao)}/reportes`, { signal: sinal });
+}
+
+export function notificacoesDoCidadao(cidadao, sinal) {
+  return pedir(`/cidadaos/${encodeURIComponent(cidadao)}/notificacoes`, { signal: sinal });
+}
+
+export function marcarNotificacoesLidas(cidadao) {
+  return pedir(`/cidadaos/${encodeURIComponent(cidadao)}/notificacoes/lidas`, { method: "POST" });
 }

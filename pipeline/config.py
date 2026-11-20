@@ -47,6 +47,8 @@ class Categoria:
     lado_minimo_px: float | None= None
     suprimir_contidas: float | None= None
     inclinacao_panorama: float | None= None
+    # Problems a citizen can report for this category (id -> label), see pipeline/catalog/reportes.py.
+    problemas: dict[str, str]= field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,7 @@ def load_classes(path: Path) -> Classes:
                 lado_minimo_px=None if campos.get("lado_minimo_px") is None else float(campos["lado_minimo_px"]),
                 suprimir_contidas=None if campos.get("suprimir_contidas") is None else float(campos["suprimir_contidas"]),
                 inclinacao_panorama=None if campos.get("inclinacao_panorama") is None else float(campos["inclinacao_panorama"]),
+                problemas={str(k): str(v) for k, v in dict(campos.get("problemas", {})).items()},
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

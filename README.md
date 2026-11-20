@@ -66,6 +66,25 @@ Sem este ficheiro o mapa aparece vazio (os marcadores continuam a ver-se). Em de
 2. O **worker** analisa-os. Se ele não estiver a correr, a análise fica "Na fila" e a interface avisa.
 3. Na análise: mapa, lista com filtros, fotografias com a caixa desenhada, e Avaliar (validar, rejeitar, corrigir tipo e posição, juntar ou separar elementos). Exportar em GeoJSON ou CSV pelo menu Exportar.
 
+### Reportes dos cidadãos
+
+Os problemas (sinal torto, candeeiro apagado, contentor cheio...) vêm só dos cidadãos; não há avaliação automática do estado. A interface tem duas áreas separadas:
+
+**Cidadão** (`/reportar`, `/notificacoes`; sem conta, sem ligações para a área do técnico):
+
+1. **Reportar** (`/reportar`): o cidadão tira ou escolhe uma fotografia. O browser pede a localização (só funciona em HTTPS ou `localhost`; sem ela usa-se o GPS da fotografia ou o cidadão toca no mapa).
+2. O worker desfoca rostos e matrículas e procura os objetos na fotografia (o mesmo detetor das análises), mostrados em caixas numeradas. Os reportes passam à frente das análises na fila.
+3. O cidadão toca no objeto (ou indica o tipo, se não estiver assinalado), escolhe o problema (`problemas` em `config/classes.yaml`) e envia. O reporte liga-se ao elemento do catálogo da mesma categoria a menos de 15 m (o do mesmo tipo primeiro); não cria elementos novos.
+4. **Notificações** (sino no canto superior direito): cada mudança de estado gera uma notificação. O cidadão é identificado por um código aleatório guardado no browser, por isso só as vê no dispositivo onde reportou.
+
+**Técnico** (`/`, `/a/<código>`, `/tecnico/reportes`; navegação "Análises" e "Problemas" com o número por tratar):
+
+- **No mapa da análise** os elementos com problemas por tratar têm um pino vermelho com "!" (sempre visível, fora dos agrupamentos), e os problemas sem elemento a menos de 15 m aparecem como losangos vermelhos. Na lista, "Problemas reportados por cidadãos" filtra só esses elementos. No painel do elemento, a primeira fotografia é a do cidadão ("Foto do cidadão"); as do levantamento seguem-se como antes. O separador **Problema** mostra o reporte e permite marcá-lo "Em resolução", "Resolvido" ou "Não precisa de intervenção", com uma nota para o cidadão.
+- **Problemas** (`/tecnico/reportes`): caixa de entrada com os problemas de todas as zonas, separador Arquivo (resolvidos, que se podem reabrir) e exportação em CSV ou GeoJSON com o histórico. "Ver no mapa" abre a análise no elemento (`/a/<código>?e=<id>`).
+- **Repetidos**: se outro cidadão reportar o mesmo problema no mesmo elemento enquanto está aberto, o reporte junta-se ao existente como confirmação ("Reportado por N cidadãos"): a fotografia entra na galeria do elemento, e todos são notificados quando o técnico o tratar.
+
+Cada passo fica em `reporte_evento` (nunca se apaga).
+
 Regras dos envios:
 
 - Fotografias: GPS e, de preferência, direção no EXIF (sem direção, deduz-se das vizinhas). **Sem GPS a fotografia é analisada na mesma**: os elementos aparecem na lista com o aviso "GPS indisponível", e o técnico indica a posição ao avaliar.
@@ -126,6 +145,8 @@ Aparece como uma análise por zona. Imagens já registadas são ignoradas. Opç�
 - `GET /analises/{token}/duplicados`: pares da mesma categoria a menos de 4 m (`raio` muda a distância).
 - `POST /elementos/{id}/juntar` (`{origem, autor}`) e `POST /elementos/{id}/separar` (`{observacoes, autor}`): revisão manual, sempre registada em `correcao`.
 - `GET /imagens/{id}`: só serve ficheiros de `ANON_DIR`.
+- Reportes do cidadão: `POST /reportes` (fotografia, `cidadao`, `lon`/`lat` opcionais), `GET /reportes/{token}`, `GET /reportes/{token}/foto` e `POST /reportes/{token}/enviar` (`{indice | categoria, problema, descricao, lon, lat}`). Notificações: `GET /cidadaos/{id}/notificacoes`, `POST /cidadaos/{id}/notificacoes/lidas` e `GET /cidadaos/{id}/reportes`.
+- Técnico: `GET /reportes?estado=abertos|arquivo|todos&categoria=&analise=` (GeoJSON; com `analise`, os da sua zona), `PATCH /reportes/{token}` (`{autor, estado, nota}`, notifica quem reportou e quem confirmou), `GET /reportes.csv` e `GET /reportes.geojson` (com o histórico). `GET /elementos?com_reportes=true` mostra só os elementos com reportes por tratar.
 
 ## Testes
 
@@ -134,7 +155,7 @@ pytest
 TEST_DATABASE_URL=postgresql+psycopg://utilizador:palavra-passe@localhost:5432/base_de_testes pytest
 ```
 
-Os testes de catálogo e API só correm com `TEST_DATABASE_URL`, que tem de apontar a uma base descartável e vazia.
+Os testes de catálogo e API só correm com `TEST_DATABASE_URL`, que tem de apontar a uma base descartável e vazia (por exemplo `docker compose exec db createdb -U ctrlf ctrlf_testes`). No Windows use `127.0.0.1` em vez de `localhost`: o Docker só escuta em IPv4 e cada ligação a `localhost` espera cerca de 2 minutos pelo IPv6.
 
 ## Treino
 

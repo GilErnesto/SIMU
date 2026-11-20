@@ -4,6 +4,7 @@ import {
   corrigirElemento,
   juntarElementos,
   listarDuplicados,
+  listarReportes,
   listarElementos,
   obterAnalise,
   obterConfig,
@@ -21,9 +22,11 @@ import Fotos from "./Fotos.jsx";
 import Lateral from "./Lateral.jsx";
 import Mapa from "./Mapa.jsx";
 import Marca from "./Marca.jsx";
+import { NavegacaoTecnico } from "./Navegacao.jsx";
+import PainelProblemas from "./PainelProblemas.jsx";
 import MenuExportar from "./MenuExportar.jsx";
 import ProgressoDaAnalise from "./ProgressoDaAnalise.jsx";
-import { Ligacao } from "./rota.js";
+import { ir, Ligacao } from "./rota.js";
 import { ESTADOS_ANALISE, analiseEmCurso, lerNumero } from "./rotulos.js";
 
 const INTERVALO_MS= 3000;
@@ -79,7 +82,10 @@ export default function PaginaAnalise({ token }) {
   const [config, setConfig]= useState({ fase: "a-carregar" });
   const [filtros, setFiltros]= useState(FILTROS_VAZIOS);
   const [lista, setLista]= useState({ estado: "a-carregar", features: [] });
-  const [selecionadoId, setSelecionadoId]= useState(null);
+  const [selecionadoId, setSelecionadoId]= useState(() => Number(new URLSearchParams(window.location.search).get("e")) || null);
+  const inicial= useRef(selecionadoId);
+  const [problemas, setProblemas]= useState([]);
+  const [verProblema, setVerProblema]= useState(false);
   const [foco, setFoco]= useState(null);
   const [detalhe, setDetalhe]= useState({ estado: "a-carregar" });
   const [aba, setAba]= useState("mapa");
@@ -110,6 +116,8 @@ export default function PaginaAnalise({ token }) {
   const analise= pedido.fase === "ok" ? pedido.dados : null;
   const concluida= analise?.estado === "concluida";
   const avaliarAberto= avaliar && detalhe.estado === "ok";
+  const reportesDoElemento= detalhe.estado === "ok" ? (detalhe.dados.properties.reportes ?? []) : [];
+  const problemaAberto= verProblema && !avaliarAberto && reportesDoElemento.length > 0;
   const lateralFechada= avaliarAberto ? (lateralManual ?? true) : lateralRetraida;
 
   useEffect(() => {
@@ -159,6 +167,34 @@ export default function PaginaAnalise({ token }) {
       });
     return () => controlo.abort();
   }, [concluida, token, filtros, tentativaLista]);
+
+  useEffect(() => {
+    if (!concluida) return undefined;
+    const controlo= new AbortController();
+    const carregar= () =>
+      listarReportes("abertos", null, controlo.signal, token)
+        .then((dados) => setProblemas(dados.features))
+        .catch(() => {});
+    carregar();
+    window.addEventListener("simu:reportes", carregar);
+    return () => {
+      controlo.abort();
+      window.removeEventListener("simu:reportes", carregar);
+    };
+  }, [concluida, token, tentativaLista]);
+
+  useEffect(() => {
+    const id= inicial.current;
+    if (id === null || lista.estado !== "ok") return;
+    const feature= lista.features.find((f) => f.properties.id === id);
+    if (feature?.geometry) {
+      const [lon, lat]= feature.geometry.coordinates;
+      setFoco({ lat, lon });
+    }
+    inicial.current= null;
+    setAba("fotos");
+    setVerProblema(true);
+  }, [lista]);
 
   useEffect(() => {
     if (selecionadoId === null) return undefined;
@@ -272,6 +308,7 @@ export default function PaginaAnalise({ token }) {
       setModoMover(false);
       setCandidata(null);
       setAba("fotos");
+      setVerProblema(lista.features.find((f) => f.properties.id === id)?.properties.reportes_abertos > 0);
       if (origem === "lista") {
         const feature= lista.features.find((f) => f.properties.id === id);
         if (feature?.geometry) {
@@ -285,7 +322,23 @@ export default function PaginaAnalise({ token }) {
 
   function abrirAvaliar() {
     gatilho.current= document.activeElement;
+    setVerProblema(false);
     setAvaliar(true);
+  }
+
+  function abrirFotos() {
+    setVerProblema(false);
+    fecharAvaliar();
+  }
+
+  function abrirProblema() {
+    fecharAvaliar();
+    setVerProblema(true);
+  }
+
+  function problemaMudou() {
+    setTentativaDetalhe((n) => n + 1);
+    setTentativaLista((n) => n + 1);
   }
 
   function alternarLateral() {
@@ -363,6 +416,7 @@ export default function PaginaAnalise({ token }) {
           <span className={`estado estado--${analise.estado}`}>{ESTADOS_ANALISE[analise.estado]}</span>
         </div>
       )}
+      <NavegacaoTecnico />
       {concluida && config.fase === "ok" && (
         <div className="cabecalho__acoes">
           <ChipAvisos avisos={analise.avisos} />
@@ -480,6 +534,9 @@ export default function PaginaAnalise({ token }) {
           aoMudarFiltros={mudarFiltros}
           aoLimparFiltros={() => setFiltros(FILTROS_VAZIOS)}
           aoAbrirDuplicados={() => setDuplicadosAbertos(true)}
+          problemas={problemas.length}
+          soProblemas={Boolean(filtros.comReportes)}
+          aoAlternarProblemas={() => mudarFiltros({ comReportes: filtros.comReportes ? "" : "1" })}
           aoSelecionar={selecionar}
           aoRepetir={() => setTentativaLista((n) => n + 1)}
         />
@@ -497,12 +554,14 @@ export default function PaginaAnalise({ token }) {
                 aoSelecionar={selecionar}
                 aoEscolherPosicao={(lat, lon) => setCandidata({ lat: lat.toFixed(6), lon: lon.toFixed(6) })}
                 duplicadosIds={duplicadosIds}
+                problemasSoltos={problemas.filter((f) => f.properties.elemento_id === null && f.geometry)}
+                aoAbrirProblemaSolto={(tokenReporte) => ir(`/tecnico/reportes?r=${tokenReporte}`)}
               />
             </section>
             <Divisor valor={fotosPct} aoMudar={mudarDivisao} />
             <section className="painel-direito" data-modo={avaliarAberto ? "avaliar" : "fotos"} aria-label="Detalhe do elemento">
               <div className="abas" role="group" aria-label="Painel do elemento">
-                <button type="button" className="aba" aria-pressed={!avaliarAberto} onClick={fecharAvaliar}>
+                <button type="button" className="aba" aria-pressed={!avaliarAberto && !problemaAberto} onClick={abrirFotos}>
                   Fotografias
                 </button>
                 <button
@@ -514,8 +573,18 @@ export default function PaginaAnalise({ token }) {
                 >
                   Avaliar
                 </button>
+                {reportesDoElemento.length > 0 && (
+                  <button type="button" className="aba aba--problema" aria-pressed={problemaAberto} onClick={abrirProblema}>
+                    Problema
+                    {detalhe.dados.properties.reportes_abertos > 0 && (
+                      <span className="contador">{detalhe.dados.properties.reportes_abertos}</span>
+                    )}
+                  </button>
+                )}
               </div>
-              {avaliarAberto ? (
+              {problemaAberto ? (
+                <PainelProblemas config={dadosConfig} reportes={reportesDoElemento} tecnico={tecnico} aoMudar={problemaMudou} />
+              ) : avaliarAberto ? (
                 <Avaliar
                   config={dadosConfig}
                   dados={detalhe.dados}

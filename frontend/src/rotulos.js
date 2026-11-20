@@ -16,6 +16,7 @@ export const FONTES= {
   kartaview: "KartaView",
   video: "Vídeo",
   upload: "Ficheiro enviado",
+  cidadao: "Reporte de um cidadão",
 };
 
 export const ESTADOS_ANALISE= {
@@ -83,4 +84,32 @@ export function formatarTamanho(bytes) {
   if (bytes < 1024 * 1024) return `${Math.max(Math.round(bytes / 1024), 1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+export const ESTADOS_REPORTE= {
+  aberto: "Por tratar",
+  em_resolucao: "Em resolução",
+  resolvido: "Resolvido",
+  rejeitado: "Sem intervenção",
+  rascunho: "Por enviar",
+};
+
+// One line of a report's history: what happened, by whom, and the note.
+export function descreverEvento(evento) {
+  const doCidadao= evento.autor === "cidadão";
+  const acoes= {
+    rascunho: "Fotografia enviada",
+    aberto: doCidadao ? "Reporte enviado" : "Reaberto",
+    em_resolucao: "Em resolução",
+    resolvido: "Resolvido",
+    rejeitado: "Considerado sem necessidade de intervenção",
+  };
+  const acao= acoes[evento.estado] ?? evento.estado;
+  const quem= doCidadao ? "" : ` por ${evento.autor}`;
+  const nota= evento.nota && evento.nota !== acao && evento.estado !== "rascunho" ? `: ${evento.nota}` : "";
+  return `${acao}${quem}${nota}`;
+}
+
+export function rotuloProblema(config, categoria, problema) {
+  return config?.categorias?.[categoria]?.problemas?.find((p) => p.id === problema)?.rotulo ?? problema;
 }

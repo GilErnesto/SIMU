@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 
 import { ESTADOS } from "./rotulos.js";
 
-export const FILTROS_VAZIOS= { categoria: "", classe: "", estado: "", minObservacoes: "", minConfianca: "" };
+export const FILTROS_VAZIOS= { categoria: "", classe: "", estado: "", minObservacoes: "", minConfianca: "", comReportes: "" };
 
 export function contarFiltros(filtros) {
   return Object.values(filtros).filter(Boolean).length;
@@ -65,6 +65,13 @@ export default function Filtros({ config, filtros, mostrados, total, aoMudar, ao
                 {ESTADOS[estado] ?? estado}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="campo">
+          <label htmlFor="filtro-problemas">Problemas reportados</label>
+          <select id="filtro-problemas" value={filtros.comReportes} onChange={(evento) => aoMudar({ comReportes: evento.target.value })}>
+            <option value="">Todos os elementos</option>
+            <option value="1">Só com problemas por tratar</option>
           </select>
         </div>
         <div className="campo">

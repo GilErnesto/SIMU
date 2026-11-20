@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import re
 import shutil
@@ -7,17 +9,27 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from geoalchemy2 import WKTElement
 from geoalchemy2.shape import to_shape
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from backend.deps import anon_dir, get_classes, get_engine, get_municipio, get_session, raw_dir
-from pipeline.catalog import analises, revisao
+from pipeline.catalog import analises, reportes, revisao
 from pipeline.catalog.export import to_csv, to_feature, to_geojson
-from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao, ensure_schema
+from pipeline.catalog.write import (
+    Analise,
+    Correcao,
+    Elemento,
+    Imagem,
+    Notificacao,
+    Observacao,
+    Reporte,
+    ensure_schema,
+)
 from pipeline.config import ZONA_MAX_GRAUS, Classes, Municipio, aplicar_bbox
 from pipeline.errors import ErroPipeline
 from pipeline.ingest.uploads import tipo_de
@@ -107,9 +119,40 @@ def _area(observacao: Observacao) -> float:
     return (x2 - x1) * (y2 - y1)
 
 
+def _foto_cidadao(reporte: Reporte) -> dict:
+    """A citizen's report photo, shaped like an observation so the photo strip and viewer can show it."""
+    return {
+        "id": f"r{reporte.id}",
+        "cidadao": True,
+        "bbox": reporte.caixa,
+        "classe": reporte.classe,
+        "confianca": None,
+        "bearing": None,
+        "imagem": {
+            "id": None,
+            "fonte": "cidadao",
+            "autor": "Cidadão",
+            "licenca": "Fotografia enviada num reporte",
+            "url_origem": "",
+            "capturada_em": reporte.criado_em,
+            "url": f"/reportes/{reporte.token}/foto",
+        },
+    }
+
+
 def _detalhe(elemento: Elemento) -> dict:
-    feature= to_feature(elemento)
-    feature["properties"]["observacoes"]= [
+    sessao= Session.object_session(elemento)
+    ligados= list(
+        sessao.scalars(select(Reporte).where(Reporte.elemento_id == elemento.id).order_by(Reporte.criado_em.desc()))
+    )
+    principais= [r for r in ligados if r.principal_id is None and r.estado != "rascunho"]
+    feature= to_feature(elemento, sum(r.estado in reportes.ABERTOS for r in principais))
+    classes= get_classes()
+    feature["properties"]["reportes"]= [reportes.para_json(classes, r) for r in principais]
+    # The citizens' photos come first: they show the problem; the survey photos follow as before.
+    fotos_cidadao= [_foto_cidadao(r) for r in ligados if r.caminho_anon and r.estado != "rascunho"]
+    feature["properties"]["n_fotos_cidadao"]= len(fotos_cidadao)
+    feature["properties"]["observacoes"]= fotos_cidadao + [
         {
             "id": obs.id,
             "bbox": obs.bbox,
@@ -151,6 +194,7 @@ def configuracao(
             nome: {
                 "rotulo": cat.rotulo,
                 "classes": [{"id": c, "rotulo": cat.rotulos.get(c, c)} for c in cat.classes],
+                "problemas": [{"id": k, "rotulo": v} for k, v in cat.problemas.items()],
             }
             for nome, cat in classes.categorias.items()
         },
@@ -167,6 +211,7 @@ def listar(
     min_confianca: float | None= Query(default=None, ge=0, le=1),
     analise: str | None= None,
     classe: str | None= None,
+    com_reportes: bool= False,
     sessao: Session= Depends(get_session),
     classes: Classes= Depends(get_classes),
 ):
@@ -180,6 +225,7 @@ def listar(
         min_confianca=min_confianca,
         analise_id=_analise_id(sessao, analise),
         classe=classe,
+        com_reportes=com_reportes,
     )
 
 
@@ -313,6 +359,246 @@ def exportar_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="catalogo.csv"'},
     )
+
+
+CIDADAO= re.compile(r"^[A-Za-z0-9-]{8,64}$")
+LIMITE_FOTO_REPORTE= 40 * 1024 * 1024
+EstadoReporte= Literal["aberto", "em_resolucao", "resolvido", "rejeitado"]
+
+
+class EnviarReportePedido(BaseModel):
+    problema: str= Field(min_length=1, max_length=32)
+    indice: int | None= Field(default=None, ge=0)
+    caixa: list[float] | None= Field(default=None, min_length=4, max_length=4)
+    categoria: str | None= None
+    descricao: str | None= Field(default=None, max_length=1000)
+    lon: float | None= Field(default=None, ge=-180, le=180)
+    lat: float | None= Field(default=None, ge=-90, le=90)
+
+    @model_validator(mode="after")
+    def validar(self):
+        if (self.lon is None) != (self.lat is None):
+            raise ValueError("lon e lat têm de vir juntos")
+        if self.indice is None and self.categoria is None:
+            raise ValueError("Escolha um objeto da fotografia ou indique o tipo")
+        return self
+
+
+class EstadoReportePedido(BaseModel):
+    autor: str= Field(min_length=1, max_length=128)
+    estado: EstadoReporte
+    nota: str | None= Field(default=None, max_length=1000)
+
+
+def _cidadao(cidadao: str) -> str:
+    if not CIDADAO.match(cidadao):
+        raise HTTPException(422, "Identificador de cidadão inválido")
+    return cidadao
+
+
+def _reporte(sessao: Session, token: str) -> Reporte:
+    try:
+        return reportes.obter(sessao, token)
+    except reportes.ErroReporte as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+
+
+@app.post("/reportes", status_code=201)
+async def criar_reporte(
+    foto: UploadFile= File(...),
+    cidadao: str= Form(...),
+    lon: float | None= Form(None),
+    lat: float | None= Form(None),
+    sessao: Session= Depends(get_session),
+):
+    """Step 1 of a citizen report: the photo. The worker anonymises it and finds the objects in it."""
+    _cidadao(cidadao)
+    if lon is None or lat is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        lon= lat= None
+    primeiro= await foto.read(BLOCO)
+    if not _formato_valido("imagem", primeiro):
+        raise HTTPException(400, "Envie uma fotografia em JPG ou PNG")
+    token= reportes.novo_token()
+    destino= reportes.caminho_raw(raw_dir(), token)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    total= 0
+    try:
+        with destino.open("wb") as saida:
+            bloco= primeiro
+            while bloco:
+                total+= len(bloco)
+                if total > LIMITE_FOTO_REPORTE:
+                    raise HTTPException(413, "A fotografia é demasiado grande (máximo 40 MB)")
+                saida.write(bloco)
+                bloco= await foto.read(BLOCO)
+    except BaseException:
+        destino.unlink(missing_ok=True)
+        raise
+    reporte= reportes.criar(sessao, cidadao, lon, lat, token=token)
+    return {"token": reporte.token}
+
+
+@app.get("/reportes")
+def listar_reportes(
+    estado: Literal["abertos", "arquivo", "todos"]= "abertos",
+    categoria: str | None= None,
+    analise: str | None= None,
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    """Technician queue as GeoJSON: open reports, or the archive (resolved and rejected); with `analise`,
+    only those on that analysis' map."""
+    _verificar_categoria(categoria, classes)
+    return _reportes_geojson(sessao, classes, estado, categoria, _analise_id(sessao, analise))
+
+
+def _reportes_geojson(sessao, classes, estado="todos", categoria=None, analise_id=None, eventos=False) -> dict:
+    estados= {"abertos": reportes.ABERTOS, "arquivo": ("resolvido", "rejeitado"), "todos": None}[estado]
+    features= []
+    for reporte in reportes.listar(sessao, estados, categoria, analise_id):
+        dados= reportes.para_json(classes, reporte, eventos=eventos)
+        geometria= None if dados["lon"] is None else {"type": "Point", "coordinates": [dados["lon"], dados["lat"]]}
+        features.append({"type": "Feature", "geometry": geometria, "properties": dados})
+    return {"type": "FeatureCollection", "features": features}
+
+
+@app.get("/reportes.geojson")
+def exportar_reportes_geojson(
+    estado: Literal["abertos", "arquivo", "todos"]= "todos",
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    """Every report (confirmations counted, not repeated) with its full history, for GIS tools."""
+    return JSONResponse(
+        jsonable_encoder(_reportes_geojson(sessao, classes, estado, eventos=True)),
+        media_type="application/geo+json",
+        headers={"Content-Disposition": 'attachment; filename="reportes.geojson"'},
+    )
+
+
+@app.get("/reportes.csv")
+def exportar_reportes(sessao: Session= Depends(get_session), classes: Classes= Depends(get_classes)):
+    """Archive of every report with its full history (one row per event)."""
+    saida= io.StringIO()
+    escritor= csv.writer(saida)
+    escritor.writerow(
+        [
+            "reporte", "titulo", "categoria", "classe", "problema", "lon", "lat", "elemento_id",
+            "confirmacoes", "estado_atual", "evento", "autor", "nota", "em",
+        ]
+    )
+    for reporte in reportes.listar(sessao):
+        dados= reportes.para_json(classes, reporte)
+        for evento in reporte.eventos:
+            escritor.writerow(
+                [
+                    reporte.id, dados["titulo"], reporte.categoria, reporte.classe, reporte.problema,
+                    dados["lon"], dados["lat"], reporte.elemento_id, dados["confirmacoes"], reporte.estado,
+                    evento.estado, evento.autor, evento.nota, evento.em.isoformat(),
+                ]
+            )
+    return Response(
+        saida.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="reportes.csv"'},
+    )
+
+
+@app.get("/reportes/{token}")
+def obter_reporte(token: str, sessao: Session= Depends(get_session), classes: Classes= Depends(get_classes)):
+    return reportes.para_json(classes, _reporte(sessao, token), eventos=True)
+
+
+@app.get("/reportes/{token}/foto")
+def foto_reporte(token: str, sessao: Session= Depends(get_session)):
+    reporte= _reporte(sessao, token)
+    ficheiro= reportes.caminho_foto(anon_dir(), reporte.token)
+    if not reporte.caminho_anon or not ficheiro.is_file():
+        raise HTTPException(404, "Fotografia ainda não disponível")
+    return FileResponse(ficheiro, media_type="image/jpeg")
+
+
+@app.post("/reportes/{token}/enviar")
+def enviar_reporte(
+    token: str,
+    pedido: EnviarReportePedido,
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    """Step 2: the object the citizen picked (a detected box, or a type they chose) and the problem."""
+    reporte= _reporte(sessao, token)
+    try:
+        reportes.enviar(
+            sessao,
+            classes,
+            reporte,
+            pedido.problema,
+            pedido.indice,
+            pedido.caixa,
+            pedido.categoria,
+            pedido.descricao,
+            pedido.lon,
+            pedido.lat,
+        )
+    except reportes.ErroReporte as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+    return reportes.para_json(classes, reporte, eventos=True)
+
+
+@app.patch("/reportes/{token}")
+def mudar_estado_reporte(
+    token: str,
+    pedido: EstadoReportePedido,
+    sessao: Session= Depends(get_session),
+    classes: Classes= Depends(get_classes),
+):
+    """Technician: in progress, resolved or not a problem. The citizen gets a notification."""
+    reporte= _reporte(sessao, token)
+    try:
+        reportes.mudar_estado(sessao, classes, reporte, pedido.estado, pedido.autor.strip(), pedido.nota)
+    except reportes.ErroReporte as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+    return reportes.para_json(classes, reporte, eventos=True)
+
+
+@app.get("/cidadaos/{cidadao}/reportes")
+def reportes_do_cidadao(cidadao: str, sessao: Session= Depends(get_session), classes: Classes= Depends(get_classes)):
+    _cidadao(cidadao)
+    linhas= sessao.scalars(
+        select(Reporte)
+        .where(Reporte.cidadao_id == cidadao, Reporte.estado != "rascunho")
+        .order_by(Reporte.criado_em.desc())
+    )
+    return [reportes.para_json(classes, r) for r in linhas]
+
+
+@app.get("/cidadaos/{cidadao}/notificacoes")
+def notificacoes(cidadao: str, sessao: Session= Depends(get_session)):
+    _cidadao(cidadao)
+    linhas= sessao.execute(
+        select(Notificacao, Reporte.token)
+        .join(Reporte, Reporte.id == Notificacao.reporte_id)
+        .where(Notificacao.cidadao_id == cidadao)
+        .order_by(Notificacao.criada_em.desc())
+        .limit(100)
+    ).all()
+    return {
+        "nao_lidas": sum(not n.lida for n, _ in linhas),
+        "notificacoes": [
+            {"id": n.id, "estado": n.estado, "texto": n.texto, "lida": n.lida, "criada_em": n.criada_em, "reporte": token}
+            for n, token in linhas
+        ],
+    }
+
+
+@app.post("/cidadaos/{cidadao}/notificacoes/lidas")
+def marcar_lidas(cidadao: str, sessao: Session= Depends(get_session)):
+    _cidadao(cidadao)
+    sessao.execute(
+        update(Notificacao).where(Notificacao.cidadao_id == cidadao, Notificacao.lida.is_(False)).values(lida=True)
+    )
+    sessao.commit()
+    return {"ok": True}
 
 
 LIMITE_FICHEIROS= 2000

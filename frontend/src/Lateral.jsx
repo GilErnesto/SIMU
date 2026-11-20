@@ -1,3 +1,4 @@
+import { TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import Filtros, { contarFiltros } from "./Filtros.jsx";
@@ -39,6 +40,9 @@ export default function Lateral({
   aoMudarFiltros,
   aoLimparFiltros,
   aoAbrirDuplicados,
+  problemas= 0,
+  soProblemas= false,
+  aoAlternarProblemas,
   aoSelecionar,
   aoRepetir,
 }) {
@@ -107,6 +111,13 @@ export default function Lateral({
         <span>Possíveis duplicados</span>
         <span className="selo selo--linha">{pares}</span>
       </button>
+      {(problemas > 0 || soProblemas) && (
+        <button type="button" className="lateral__problemas" aria-pressed={soProblemas} onClick={aoAlternarProblemas}>
+          <TriangleAlert aria-hidden="true" size={18} />
+          <span>{soProblemas ? "A mostrar só elementos com problemas" : "Problemas reportados por cidadãos"}</span>
+          <span className="contador contador--linha">{problemas}</span>
+        </button>
+      )}
       <ListaElementos
         semTitulo
         config={config}

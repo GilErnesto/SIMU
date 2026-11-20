@@ -5,6 +5,8 @@ mean over all members (a member that saw nothing counts as 0), its box the mean 
 one from its most confident member.
 """
 
+from dataclasses import replace
+
 import numpy as np
 
 from pipeline.models import Detection
@@ -41,7 +43,7 @@ def juntar(listas: list[list[Detection]], iou: float= IOU_GRUPO) -> list[Detecti
         melhor= max(membros, key=lambda d: d.confidence)
         caixa= tuple(float(v) for v in np.mean([d.bbox_xyxy for d in membros], axis=0))
         confianca= sum(d.confidence for d in membros) / len(listas)
-        saida.append(Detection(melhor.image_id, melhor.category, melhor.class_name, caixa, confianca, melhor.obstruido))
+        saida.append(replace(melhor, bbox_xyxy=caixa, confidence=confianca))
     return saida
 
 

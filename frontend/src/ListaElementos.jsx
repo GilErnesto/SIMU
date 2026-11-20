@@ -115,6 +115,7 @@ export default function ListaElementos({
                     <span className="item__meta">
                       n.º {p.id}, {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}
                       {p.obstruido ? ", tapado" : ""}
+                      {p.reportes_abertos > 0 ? `, ${p.reportes_abertos === 1 ? "1 problema reportado" : `${p.reportes_abertos} problemas reportados`}` : ""}
                       {feature.geometry ? "" : ", sem posição"}
                     </span>
                   </span>

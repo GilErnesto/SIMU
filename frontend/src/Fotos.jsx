@@ -14,7 +14,12 @@ import { Ligacao } from "./rota.js";
 
 export function legendaDe(imagem) {
   const fonte= FONTES[imagem.fonte] ?? imagem.fonte;
-  const origem= imagem.fonte === "upload" || imagem.fonte === "video" ? `${fonte}` : `Foto de ${imagem.autor} no ${fonte}`;
+  const origem=
+    imagem.fonte === "cidadao"
+      ? "Foto do cidadão"
+      : imagem.fonte === "upload" || imagem.fonte === "video"
+        ? `${fonte}`
+        : `Foto de ${imagem.autor} no ${fonte}`;
   return `${origem}${imagem.capturada_em ? `, ${formatarData(imagem.capturada_em)}` : ""}. ${imagem.licenca}.`;
 }
 
@@ -84,6 +89,7 @@ export function Miniatura({ observacao, indice, total, marcada, aoMarcar, aoAbri
         onClick={() => aoAbrir(indice)}
       >
         <ImagemComCaixa observacao={observacao} />
+        {observacao.cidadao && <span className="miniatura__cidadao">Foto do cidadão</span>}
       </button>
       {aoMarcar && (
         <label className="miniatura__marcar">
@@ -209,7 +215,7 @@ export default function Fotos({ config, selecionadoId, detalhe, aoRepetir, tecni
                   indice={indice}
                   total={total}
                   marcada={marcadas.has(observacao.id)}
-                  aoMarcar={total > 1 ? alternar : undefined}
+                  aoMarcar={total - (p.n_fotos_cidadao ?? 0) > 1 && !observacao.cidadao ? alternar : undefined}
                   aoAbrir={aoAmpliar}
                 />
               </li>

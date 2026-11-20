@@ -1,5 +1,6 @@
 import math
 from collections import defaultdict
+from dataclasses import replace
 
 import cv2
 import numpy as np
@@ -168,9 +169,7 @@ def _deteccoes_das_vistas(detector, image_id: str, vistas, pitch: float, largura
             caixa= to_panorama(detecao.bbox_xyxy, yaw, largura, altura, lado, pitch)
             if caixa is None:
                 continue
-            resultado.append(
-                Detection(image_id, detecao.category, detecao.class_name, caixa, detecao.confidence, detecao.obstruido)
-            )
+            resultado.append(replace(detecao, image_id=image_id, bbox_xyxy=caixa))
     return resultado
 
 

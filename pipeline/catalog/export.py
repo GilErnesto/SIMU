@@ -5,6 +5,7 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from pipeline.catalog.reportes import abertos_por_elemento
 from pipeline.catalog.write import Elemento, Observacao
 
 COLUNAS_CSV= (
@@ -68,7 +69,8 @@ def _carregar(
     return list(session.scalars(consulta.order_by(Elemento.id)))
 
 
-def to_feature(elemento: Elemento) -> dict:
+def to_feature(elemento: Elemento, reportes_abertos: int= 0) -> dict:
+    """reportes_abertos: citizens' reports still open for it, the only source of "problem" on the map."""
     ponto= None if elemento.geom is None else to_shape(elemento.geom)
     return {
         "type": "Feature",
@@ -82,6 +84,7 @@ def to_feature(elemento: Elemento) -> dict:
             "estado": elemento.estado,
             "metodo_geo": elemento.metodo_geo,
             "n_observacoes": elemento.n_observacoes,
+            "reportes_abertos": reportes_abertos,
             "atribuicao": _atribuicao(elemento),
         },
     }
@@ -96,15 +99,15 @@ def to_geojson(
     min_confianca: float | None= None,
     analise_id: int | None= None,
     classe: str | None= None,
+    com_reportes: bool= False,
 ) -> dict:
+    elementos= _carregar(session, estado, categoria, bbox, min_observacoes, min_confianca, analise_id, classe)
+    abertos= abertos_por_elemento(session, [e.id for e in elementos])
+    if com_reportes:
+        elementos= [e for e in elementos if abertos.get(e.id)]
     return {
         "type": "FeatureCollection",
-        "features": [
-            to_feature(e)
-            for e in _carregar(
-                session, estado, categoria, bbox, min_observacoes, min_confianca, analise_id, classe
-            )
-        ],
+        "features": [to_feature(e, abertos.get(e.id, 0)) for e in elementos],
     }
 
 

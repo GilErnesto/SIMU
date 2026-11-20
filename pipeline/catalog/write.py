@@ -116,6 +116,70 @@ class Correcao(Base):
     em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Reporte(Base):
+    """A problem reported by a citizen from a photo (pipeline/catalog/reportes.py)."""
+
+    __tablename__= "reporte"
+    __table_args__= (
+        CheckConstraint("estado IN ('rascunho', 'aberto', 'em_resolucao', 'resolvido', 'rejeitado')"),
+        CheckConstraint("estado_foto IN ('na_fila', 'pronta', 'falhou')"),
+    )
+
+    id: Mapped[int]= mapped_column(primary_key=True)
+    token: Mapped[str]= mapped_column(String(32), unique=True)
+    cidadao_id: Mapped[str]= mapped_column(String(64), index=True)
+    estado: Mapped[str]= mapped_column(String(16), default="rascunho")
+    estado_foto: Mapped[str]= mapped_column(String(16), default="na_fila")
+    erro: Mapped[str | None]= mapped_column(Text)
+    caminho_anon: Mapped[str | None]= mapped_column(String(512))
+    largura: Mapped[int]= mapped_column(Integer, default=0)
+    altura: Mapped[int]= mapped_column(Integer, default=0)
+    # Detector boxes on the photo: [{categoria, classe, caixa, confianca}], for the citizen to pick one.
+    caixas= mapped_column(JSON, default=list)
+    caixa: Mapped[list | None]= mapped_column(JSON)
+    categoria: Mapped[str | None]= mapped_column(String(32))
+    classe: Mapped[str | None]= mapped_column(String(32))
+    problema: Mapped[str | None]= mapped_column(String(32))
+    descricao: Mapped[str | None]= mapped_column(Text)
+    geom= mapped_column(Geometry("POINT", srid=4326))
+    origem_posicao: Mapped[str | None]= mapped_column(String(16))
+    elemento_id: Mapped[int | None]= mapped_column(ForeignKey("elemento.id"), index=True)
+    # Same problem on the same element while an earlier report is open: this one confirms it, follows its
+    # state and is not listed on its own for the technician.
+    principal_id: Mapped[int | None]= mapped_column(ForeignKey("reporte.id"), index=True)
+    criado_em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
+    atualizado_em: Mapped[datetime]= mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    eventos: Mapped[list["ReporteEvento"]]= relationship(order_by="ReporteEvento.id")
+
+
+class ReporteEvento(Base):
+    """Every change of a report, never deleted: the report's log and archive."""
+
+    __tablename__= "reporte_evento"
+
+    id: Mapped[int]= mapped_column(primary_key=True)
+    reporte_id: Mapped[int]= mapped_column(ForeignKey("reporte.id"), index=True)
+    estado: Mapped[str]= mapped_column(String(16))
+    autor: Mapped[str]= mapped_column(String(128))
+    nota: Mapped[str | None]= mapped_column(Text)
+    em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Notificacao(Base):
+    __tablename__= "notificacao"
+
+    id: Mapped[int]= mapped_column(primary_key=True)
+    cidadao_id: Mapped[str]= mapped_column(String(64), index=True)
+    reporte_id: Mapped[int]= mapped_column(ForeignKey("reporte.id"))
+    # The report's new state, so the page can show the right icon.
+    estado: Mapped[str | None]= mapped_column(String(16))
+    texto: Mapped[str]= mapped_column(Text)
+    lida: Mapped[bool]= mapped_column(Boolean, default=False)
+    criada_em: Mapped[datetime]= mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 def ensure_schema(engine: Engine) -> None:
     with engine.begin() as conexao:
         conexao.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
@@ -129,6 +193,10 @@ def ensure_schema(engine: Engine) -> None:
                 text(f"CREATE INDEX IF NOT EXISTS ix_{tabela}_analise_id ON {tabela} (analise_id)")
             )
         conexao.execute(text("ALTER TABLE observacao ALTER COLUMN bearing DROP NOT NULL"))
+        conexao.execute(text("ALTER TABLE notificacao ADD COLUMN IF NOT EXISTS estado varchar(16)"))
+        conexao.execute(
+            text("ALTER TABLE reporte ADD COLUMN IF NOT EXISTS principal_id integer REFERENCES reporte(id)")
+        )
     with Session(engine) as sessao:
         atribuir_analise_inicial(sessao)
         sessao.commit()

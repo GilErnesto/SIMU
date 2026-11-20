@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { ligacaoExportacao } from "./api.js";
+import { ligacaoExportacao, ligacaoReportes } from "./api.js";
 import { IconeExportar, IconeSetaBaixo } from "./icones.jsx";
 
 const FORMATOS= [
@@ -57,6 +57,17 @@ export default function MenuExportar({ token, filtros, mostrados }) {
                 >
                   <span className="menu__nome">{formato.nome}</span>
                   <span className="nota">{formato.ajuda}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="flutuante__titulo">Problemas reportados (todas as zonas)</p>
+          <ul className="menu__lista">
+            {FORMATOS.map((formato) => (
+              <li key={formato.id}>
+                <a className="menu__opcao" href={ligacaoReportes(formato.id)} download onClick={() => setAberto(false)}>
+                  <span className="menu__nome">Problemas em {formato.nome}</span>
+                  <span className="nota">Com o histórico de cada um</span>
                 </a>
               </li>
             ))}
