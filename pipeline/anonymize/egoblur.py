@@ -11,6 +11,7 @@ MODELOS= ("ego_blur_face.jit", "ego_blur_lp.jit")
 LIMIAR_SCORE= 0.9
 LIMIAR_NMS= 0.3
 FOLGA_FP16= 0.05
+PASSAGENS= 2
 
 Detector= Callable[[np.ndarray], np.ndarray]
 
@@ -27,22 +28,26 @@ def blur_box(image: np.ndarray, box) -> None:
 
 
 class Anonymizer:
-    def __init__(self, detectors: Sequence[Detector]):
+    def __init__(self, detectors: Sequence[Detector], passagens: int= PASSAGENS):
         self.detectors= list(detectors)
+        self.passagens= passagens
 
     def __call__(self, image: np.ndarray) -> np.ndarray:
         saida= image.copy()
-        for detetor in self.detectors:
-            for caixa in detetor(image):
-                blur_box(saida, caixa)
+        alvo= image
+        for _ in range(self.passagens):
+            for detetor in self.detectors:
+                for caixa in detetor(alvo):
+                    blur_box(saida, caixa)
+            alvo= saida
         return saida
 
     @classmethod
-    def from_dir(cls, pasta: Path) -> "Anonymizer":
+    def from_dir(cls, pasta: Path, passagens: int= PASSAGENS) -> "Anonymizer":
         em_falta= [nome for nome in MODELOS if not (pasta / nome).exists()]
         if em_falta:
             raise ModeloEmFalta(f"Modelos EgoBlur em falta em {pasta}: {', '.join(em_falta)}")
-        return cls([_torchscript_detector(pasta / nome) for nome in MODELOS])
+        return cls([_torchscript_detector(pasta / nome) for nome in MODELOS], passagens)
 
 
 def _torchscript_detector(caminho: Path) -> Detector:
