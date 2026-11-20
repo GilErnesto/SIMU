@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from pathlib import Path
 
 import numpy as np
@@ -19,8 +20,16 @@ class Cabeca:
         exps= np.exp(logits)
         return exps / exps.sum(axis=1, keepdims=True)
 
-    def prever(self, embeddings: np.ndarray) -> list[tuple[str, float]]:
+    def prever(self, embeddings: np.ndarray, excluir: list[Collection[str]] | None= None) -> list[tuple[str, float]]:
+        """excluir: per row, classes the head may not answer (the rest is renormalised)."""
         probabilidades= self.probabilidades(embeddings)
+        for linha, proibidas in zip(probabilidades, excluir or [], strict=False):
+            for classe in proibidas:
+                if classe in self.classes:
+                    linha[self.classes.index(classe)]= 0.0
+            total= linha.sum()
+            if total > 0:
+                linha/= total
         melhores= probabilidades.argmax(axis=1)
         return [(self.classes[i], float(p[i])) for i, p in zip(melhores, probabilidades, strict=True)]
 

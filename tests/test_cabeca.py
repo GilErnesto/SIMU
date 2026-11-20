@@ -126,3 +126,32 @@ def test_cabeca_so_afeta_a_categoria_dela():
     refinador= Refinador(_Processador(), _Modelo(logits, [[1.0, 0.0]]), CLASSES, 0.5, cabecas={"sinal": _cabeca()})
     (tipo, _),= refinador.classificar("residuos", [np.full((50, 50, 3), 100, np.uint8)])
     assert tipo == "papeleira"
+
+
+def test_prever_exclui_classes_e_renormaliza():
+    cabeca= _cabeca()
+    (tipo, p),= cabeca.prever(np.array([[1.0, 0.0]]), [{"stop"}])
+    assert tipo == "perigo"
+    assert p == pytest.approx(1.0)
+
+
+def _cabeca_semaforo():
+    coef= np.array([[5.0, 0.0], [0.0, 5.0]])
+    return Cabeca(["semaforo", "proibicao"], coef, np.zeros(2))
+
+
+def _refinador_semaforo(zero_shot):
+    modelo= _Modelo([_logits("sinal", zero_shot)], [[1.0, 0.0]])
+    return Refinador(_Processador(), modelo, CLASSES, 0.5, cabecas={"sinal": _cabeca_semaforo()})
+
+
+def test_cabeca_sozinha_nao_pode_dizer_semaforo():
+    imagem= np.full((50, 50, 3), 100, np.uint8)
+    (tipo, _),= _refinador_semaforo("proibicao").classificar("sinal", [imagem], ["outro"])
+    assert tipo == "proibicao"
+
+
+def test_semaforo_aceite_quando_o_zero_shot_ou_o_detetor_concordam():
+    imagem= np.full((50, 50, 3), 100, np.uint8)
+    assert _refinador_semaforo("semaforo").classificar("sinal", [imagem], ["outro"])[0][0] == "semaforo"
+    assert _refinador_semaforo("proibicao").classificar("sinal", [imagem], ["semaforo"])[0][0] == "semaforo"

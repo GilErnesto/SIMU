@@ -1,0 +1,12 @@
+# Detector of the ensemble trained on batches 2+3 plus verified pseudo-labels, at 1280 px. Dataset:
+# python -m training.datasets.ouro --pastas data/ouro_batch2 data/ouro_batch3 --so-treino data/pseudo_rossio_batch2 data/pseudo_sul_batch3 --saida data/datasets/b23p
+dados: data/datasets/b23p/data.yaml
+modelo: models/detetor_original.pt
+epocas: 60
+imgsz: 1280
+lote: 4
+paciencia: 15
+trabalhadores: 1
+nome: b23p_1280
+destino: data/treino/b23p_1280_detetor.pt
+graficos: false  # matplotlib's native modules are blocked by App Control here

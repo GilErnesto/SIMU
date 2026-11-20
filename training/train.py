@@ -33,10 +33,12 @@ def treinar(config: dict, retomar: bool= False) -> Path:
         name=config["nome"],
         exist_ok=True,
         resume=retomar and ultimo.exists(),
-        seed=0,
+        seed=config.get("semente", 0),
         workers=config.get("trabalhadores", 4),
         patience=config.get("paciencia", 15),
         time=config.get("tempo"),
+        plots=config.get("graficos", True),
+        **config.get("aumentos", {}),
     )
     melhor= pasta / config["nome"] / "weights" / "best.pt"
     destino= Path(config["destino"])

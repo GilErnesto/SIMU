@@ -34,8 +34,11 @@ class Categoria:
     descricoes: dict[str, str | list[str]]= field(default_factory=dict)
     negativos: tuple[str, ...]= ()
     limiar_detecao: float= 0.0
+    # CLIP discards a box (a negative text won) only with at least this probability; None = limiar_classe.
+    limiar_descarte: float | None= None
     alias: dict[str, str]= field(default_factory=dict)
     combinar_confianca: bool= True
+    exigem_confirmacao: tuple[str, ...]= ()
     calibracao: tuple[tuple[float, float], ...]= ()
     alcance_max_m: float= ALCANCE_MAX_M
     seguir_video: bool= False
@@ -138,8 +141,10 @@ def load_classes(path: Path) -> Classes:
                 descricoes=dict(campos.get("descricoes", {})),
                 negativos=tuple(campos.get("negativos", ())),
                 limiar_detecao=float(campos.get("limiar_detecao", 0.0)),
+                limiar_descarte=None if campos.get("limiar_descarte") is None else float(campos["limiar_descarte"]),
                 alias=dict(campos.get("alias", {})),
                 combinar_confianca=bool(campos.get("combinar_confianca", True)),
+                exigem_confirmacao=tuple(campos.get("exigem_confirmacao", ())),
                 calibracao=_calibracao(campos),
                 alcance_max_m=float(campos.get("alcance_max_m", ALCANCE_MAX_M)),
                 seguir_video=bool(campos.get("seguir_video", False)),

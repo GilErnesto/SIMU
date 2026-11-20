@@ -34,21 +34,23 @@ class Limiares:
 
 
 class Detector:
-    def __init__(self, modelo, classes: Classes, limiar: float= 0.25):
+    def __init__(self, modelo, classes: Classes, limiar: float= 0.25, aumentar: bool= False):
         self.modelo= modelo
         self.classes= classes
         self.limiar= limiar
+        # Test-time augmentation (flip + scales): more small signs found, about twice the YOLO time.
+        self.aumentar= aumentar
 
     @classmethod
-    def from_weights(cls, pesos: Path, classes: Classes, limiar: float= 0.25) -> "Detector":
+    def from_weights(cls, pesos: Path, classes: Classes, limiar: float= 0.25, aumentar: bool= False) -> "Detector":
         if not pesos.exists():
             raise ModeloEmFalta(f"Pesos do detetor em falta: {pesos}")
         from ultralytics import YOLO
 
-        return cls(YOLO(str(pesos)), classes, limiar)
+        return cls(YOLO(str(pesos)), classes, limiar, aumentar)
 
     def detect(self, image_id: str, image: np.ndarray) -> list[Detection]:
-        resultado= self.modelo(image, verbose=False, conf=self.limiar)[0]
+        resultado= self.modelo(image, verbose=False, conf=self.limiar, augment=self.aumentar)[0]
         nomes= resultado.names
         caixas= resultado.boxes
         detecoes= []

@@ -67,7 +67,7 @@ Regras dos envios:
 Em `models/` (fora do git):
 
 - `models/egoblur/ego_blur_face.jit` e `ego_blur_lp.jit`: EgoBlur, pedidos à Meta. Sem eles nada é gravado.
-- `models/detetor.pt`: YOLO próprio (ver "Treino"). Sem ele usa-se o OWLv2 zero-shot.
+- `models/detetor.pt`: YOLO próprio (ver "Treino"). Sem ele usa-se o OWLv2 zero-shot. Se existirem também `models/detetor_b23.pt`, `models/detetor_b23_1280.pt` e `models/detetor_b23p_1280.pt`, usa-os todos em conjunto (`--pesos a.pt,b.pt,...`): as caixas em que concordam ficam com confiança alta. Corre com aumento em teste (inversão e escalas); `--sem-aumento` desliga-o e `--ladrilhos` procura também em recortes de 1024 px das fotos grandes (mais lento).
 - `models/tipo_sinal.npz`: cabeça que escolhe o tipo de sinal. Sem ela o tipo vem do CLIP zero-shot.
 
 O CLIP (1,7 GB) descarrega-se na primeira análise. Para reutilizar a cache que já tens, define `HF_CACHE` no `.env` (por exemplo `~/.cache/huggingface`).
@@ -164,6 +164,24 @@ python -m training.tipos treinar --saida data/datasets/correcoes_iluminacao --ca
 - O autor e a licença de cada imagem ficam em `atribuicao.csv`, na pasta de cada dataset.
 - **Os pesos só servem para uso não comercial** (o Vistas é CC BY-NC-SA 4.0).
 - As zonas piloto, de afinação e de teste ficam fora do treino.
+
+### Sinais: conjunto de ouro e categorias oficiais
+
+Os sinais usam as categorias do Regulamento de Sinalização do Trânsito (perigo, cedência de passagem, proibição, obrigação, prescrição específica, informação, pré-sinalização, direção, confirmação, localidades, complementares, painel adicional, turístico-cultural, temporária e sinalização luminosa; STOP e limite de velocidade são subtipos).
+
+```bash
+python -m pipeline.ouro preparar --checkpoint data/avaliacao/<corrida>/deteccoes.jsonl --saida data/ouro_batchN
+python -m pipeline.ouro servir --saida data/ouro_batchN          # página de revisão em http://127.0.0.1:8765
+python -m pipeline.ouro avaliar --nome experiencia               # mede no conjunto de teste (data/ouro)
+python -m training.datasets.ouro --pastas data/ouro_batch2 data/ouro_batch3 --saida data/datasets/b23
+python -m training.datasets.sinais_web                           # imagens de referência (ecdinamica.pt, bomcondutor.pt)
+python -m training.tipos_web --lotes data/ouro_batch3 --lotes-parciais data/ouro_batch2 --peso 0.6
+python -m training.robustez --cabecas models/tipo_sinal.npz      # tipo certo em recortes desfocados, rodados, pequenos...
+```
+
+- `data/ouro` (200 imagens revistas à mão) é o conjunto de teste: nunca entra no treino. `avaliar --degradar desfocada|movimento|escura|jpeg|metade` mede com as fotos estragadas.
+- `training.tipos_web` treina a cabeça do tipo com os recortes revistos e com os sinais de referência da web, estragados de propósito (desfocados, tapados, cortados, rodados, pequenos, escuros), e mistura-a com a cabeça antiga.
+- `limiar_descarte` em `config/classes.yaml`: o CLIP só deita fora uma caixa com essa certeza; abaixo disso fica com o melhor tipo. As imagens da web são de terceiros (fontes em `data/datasets/sinais_web/FONTES.md`): uso não comercial.
 
 ## Avaliação
 

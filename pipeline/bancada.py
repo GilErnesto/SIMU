@@ -21,7 +21,7 @@ from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.models import Element, ImageRecord
-from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de
+from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de, pesos_padrao
 
 RAIO_COBERTURA_M= 30.0
 
@@ -154,7 +154,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--analise", default="inicial", help="token da análise cujas imagens se usam")
     parser.add_argument("--nome", required=True, help="nome da experiência (pasta de resultados)")
     parser.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
-    parser.add_argument("--pesos", default="models/detetor.pt")
+    parser.add_argument("--pesos", default=pesos_padrao())
     parser.add_argument("--limiar", type=float, default=0.2)
     parser.add_argument("--limiar-classe", type=float, default=0.3)
     parser.add_argument("--cabeca-sinal", default=CABECA_SINAL)
