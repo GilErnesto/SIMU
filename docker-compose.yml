@@ -62,6 +62,9 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       OMP_NUM_THREADS: ${WORKER_CPUS:-4}
       MKL_NUM_THREADS: ${WORKER_CPUS:-4}
+      MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+      MAX_IMAGENS_ZONA: ${MAX_IMAGENS_ZONA:-1500}
+      MAX_IMAGENS_VIDEO: ${MAX_IMAGENS_VIDEO:-1500}
     command:
       - python
       - -m

@@ -1,8 +1,10 @@
 import argparse
+import os
 import shutil
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -11,15 +13,113 @@ from sqlalchemy.orm import Session
 
 from pipeline.anonymize.egoblur import Anonymizer
 from pipeline.catalog import analises
-from pipeline.catalog.write import Analise, ensure_schema, write_catalog
-from pipeline.config import Classes, Municipio, load_classes, load_municipio
+from pipeline.catalog.write import Analise, ensure_schema, known_image_ids, write_catalog
+from pipeline.config import Classes, Municipio, aplicar_bbox, load_classes, load_municipio
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
-from pipeline.ingest import uploads
+from pipeline.ingest import mapillary, uploads
 from pipeline.run import CABECA_SINAL, NOME_CHECKPOINT, _detetor, _variavel, processar
 
 INTERVALO_S= 3.0
 PASSO_PROGRESSO= 5
+
+
+def _progresso(sessao: Session, analise: Analise) -> Callable[[int, int], None]:
+    ultimo= {"n": 0}
+
+    def progredir(feitas: int, total: int) -> None:
+        if feitas == total or feitas - ultimo["n"] >= PASSO_PROGRESSO:
+            ultimo["n"]= feitas
+            analises.registar_progresso(sessao, analise, feitas, total)
+
+    return progredir
+
+
+def _gravar(
+    sessao: Session,
+    analise: Analise,
+    feitas: dict,
+    falhas: list[str],
+    municipio: Municipio,
+    classes: Classes,
+    avisos: list[str],
+) -> None:
+    imagens= [registo for registo, _ in feitas.values()]
+    deteccoes= [d for _, lista in feitas.values() for d in lista]
+    elementos= locate(imagens, deteccoes, municipio, classes)
+    write_catalog(sessao, classes, imagens, elementos, analise_id=analise.id)
+    sessao.commit()
+    if falhas:
+        avisos.append(f"{len(falhas)} imagens não puderam ser lidas")
+    analises.atualizar_contagens(sessao, analise)
+    analises.concluir(sessao, analise, analise.n_elementos, avisos)
+
+
+MAX_IMAGENS_ZONA= 1500
+
+
+def _limite_zona() -> int:
+    try:
+        return int(os.environ.get("MAX_IMAGENS_ZONA", MAX_IMAGENS_ZONA))
+    except ValueError:
+        return MAX_IMAGENS_ZONA
+
+
+def _processar_zona(
+    sessao: Session,
+    analise: Analise,
+    anonimizador,
+    detetor,
+    municipio: Municipio,
+    classes: Classes,
+    pasta_anon: Path,
+    saida=sys.stderr,
+) -> bool:
+    try:
+        token= _variavel("MAPILLARY_TOKEN")
+    except ErroPipeline:
+        analises.falhar(sessao, analise, "O worker não tem o MAPILLARY_TOKEN configurado")
+        return False
+    avisos= list(analise.avisos or [])
+    try:
+        zona= aplicar_bbox(municipio, ",".join(str(valor) for valor in analise.parametros["bbox"]))
+        listadas= mapillary.fetch_images(zona.bbox, token)
+        if not listadas:
+            analises.falhar(sessao, analise, "Não há imagens do Mapillary nesta zona")
+            return False
+        conhecidas= known_image_ids(sessao, "mapillary")
+        novas= [registo for registo in listadas if registo.id_fonte not in conhecidas]
+        if not novas:
+            erro= "A imagem desta zona já está noutra análise" if len(listadas) == 1 else f"As {len(listadas)} imagens desta zona já estão noutra análise"
+            analises.falhar(sessao, analise, erro)
+            return False
+        limite= _limite_zona()
+        if len(novas) > limite:
+            analises.falhar(
+                sessao,
+                analise,
+                f"A zona tem {len(novas)} imagens, mais do que o máximo de {limite} por análise. Escolha uma zona mais pequena.",
+            )
+            return False
+        repetidas= len(listadas) - len(novas)
+        if repetidas:
+            avisos.append(f"{repetidas} imagem já existia noutra análise e ficou de fora" if repetidas == 1 else f"{repetidas} imagens já existiam noutra análise e ficaram de fora")
+        analises.registar_progresso(sessao, analise, 0, len(novas))
+        feitas, falhas= processar(
+            novas,
+            anonimizador,
+            detetor,
+            pasta_anon,
+            pasta_anon / NOME_CHECKPOINT,
+            saida=saida,
+            ao_progredir=_progresso(sessao, analise),
+        )
+        _gravar(sessao, analise, feitas, falhas, zona, classes, avisos)
+    except Exception as erro:
+        traceback.print_exc(file=saida)
+        analises.falhar(sessao, analise, f"{type(erro).__name__}: {erro}", avisos)
+        return False
+    return True
 
 
 def processar_analise(
@@ -33,6 +133,8 @@ def processar_analise(
     pasta_anon: Path,
     saida=sys.stderr,
 ) -> bool:
+    if (analise.parametros or {}).get("fonte") == "mapillary":
+        return _processar_zona(sessao, analise, anonimizador, detetor, municipio, classes, pasta_anon, saida)
     pasta= pasta_raw / analise.token
     if not pasta.is_dir():
         analises.falhar(sessao, analise, "Os ficheiros enviados já não existem no servidor")
@@ -42,21 +144,13 @@ def processar_analise(
         registos, novos_avisos= uploads.carregar(pasta, analise.token, analise.parametros or {})
         avisos.extend(novos_avisos)
         if not registos:
-            analises.falhar(
-                sessao,
-                analise,
-                "Nenhuma imagem utilizável: as fotos precisam de GPS e cada vídeo precisa de um GPX",
-                avisos,
+            motivo= next(
+                (a for a in novos_avisos if "mais do que o máximo" in a),
+                "não há fotografias nem vídeos que se consigam ler",
             )
+            analises.falhar(sessao, analise, f"Nenhuma imagem utilizável: {motivo}", avisos)
             return False
         analises.registar_progresso(sessao, analise, 0, len(registos))
-        ultimo= {"n": 0}
-
-        def progredir(feitas: int, total: int) -> None:
-            if feitas == total or feitas - ultimo["n"] >= PASSO_PROGRESSO:
-                ultimo["n"]= feitas
-                analises.registar_progresso(sessao, analise, feitas, total)
-
         feitas, falhas= processar(
             registos,
             anonimizador,
@@ -65,17 +159,9 @@ def processar_analise(
             pasta / NOME_CHECKPOINT,
             uploads.ler_ficheiro,
             saida=saida,
-            ao_progredir=progredir,
+            ao_progredir=_progresso(sessao, analise),
         )
-        imagens= [registo for registo, _ in feitas.values()]
-        deteccoes= [d for _, lista in feitas.values() for d in lista]
-        elementos= locate(imagens, deteccoes, municipio, classes)
-        write_catalog(sessao, classes, imagens, elementos, analise_id=analise.id)
-        sessao.commit()
-        if falhas:
-            avisos.append(f"{len(falhas)} imagens não puderam ser lidas")
-        analises.atualizar_contagens(sessao, analise)
-        analises.concluir(sessao, analise, analise.n_elementos, avisos)
+        _gravar(sessao, analise, feitas, falhas, municipio, classes, avisos)
     except Exception as erro:
         traceback.print_exc(file=saida)
         analises.falhar(sessao, analise, f"{type(erro).__name__}: {erro}", avisos)

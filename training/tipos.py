@@ -100,7 +100,10 @@ def avaliar(previstas: list[str], reais: list[str]) -> dict:
     return {"exatidao": certos / len(reais) if reais else None, "classes": por_classe}
 
 
-def treinar_tipos(saida: Path, incorporar, zero_shot, destino: Path) -> dict:
+REGULARIZACAO= {"sinal": 30.0, "iluminacao": 10.0}
+
+
+def treinar_tipos(saida: Path, incorporar, zero_shot, destino: Path, regularizacao: float= 1.0) -> dict:
     listados= listar(saida)
     contagem= Counter(classe for _, classe in listados["train"])
     usadas= {c for c, n in contagem.items() if n >= MINIMO_POR_CLASSE}
@@ -109,7 +112,7 @@ def treinar_tipos(saida: Path, incorporar, zero_shot, destino: Path) -> dict:
     treino= [(f, c) for f, c in listados["train"] if c in usadas]
     validacao= [(f, c) for f, c in listados["val"] if c in usadas]
     X_treino= incorporar_tudo([f for f, _ in treino], incorporar)
-    cabeca= treinar(X_treino, [c for _, c in treino])
+    cabeca= treinar(X_treino, [c for _, c in treino], regularizacao)
     relatorio= {"classes_usadas": sorted(usadas), "treino": len(treino), "validacao": len(validacao)}
     if validacao:
         X_val= incorporar_tudo([f for f, _ in validacao], incorporar)
@@ -117,12 +120,12 @@ def treinar_tipos(saida: Path, incorporar, zero_shot, destino: Path) -> dict:
         relatorio["cabeca"]= avaliar([c for c, _ in cabeca.prever(X_val)], reais)
         relatorio["zero_shot"]= avaliar(zero_shot([f for f, _ in validacao]), reais)
     todos= treino + validacao
-    final= treinar(incorporar_tudo([f for f, _ in todos], incorporar), [c for _, c in todos])
+    final= treinar(incorporar_tudo([f for f, _ in todos], incorporar), [c for _, c in todos], regularizacao)
     final.guardar(destino)
     return relatorio
 
 
-def _carregar_modelo(args):
+def _carregar_modelo(args, categoria):
     from pipeline.config import load_classes
     from pipeline.detect.refinar import Refinador
 
@@ -140,7 +143,7 @@ def _carregar_modelo(args):
         previstas= []
         for i in range(0, len(ficheiros), LOTE):
             recortes= [cv2.imread(str(f)) for f in ficheiros[i : i + LOTE]]
-            for classe, _ in refinador.classificar("sinal", recortes):
+            for classe, _ in refinador.classificar(categoria, recortes):
                 previstas.append(classe or "negativo")
         return previstas
 
@@ -155,6 +158,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--egoblur", default="models/egoblur")
     parser.add_argument("--classes", default="config/classes.yaml")
     parser.add_argument("--destino", default="models/tipo_sinal.npz")
+    parser.add_argument("--categoria", default="sinal")
     args= parser.parse_args(argv)
     saida= Path(args.saida)
     try:
@@ -164,8 +168,8 @@ def main(argv: list[str] | None= None) -> int:
             contagem= recortar(saida / "detecoes.jsonl", Path(args.raw), saida, Anonymizer.from_dir(Path(args.egoblur)))
             print(f"Recortes novos: {dict(contagem)}")
         else:
-            incorporar, zero_shot= _carregar_modelo(args)
-            relatorio= treinar_tipos(saida, incorporar, zero_shot, Path(args.destino))
+            incorporar, zero_shot= _carregar_modelo(args, args.categoria)
+            relatorio= treinar_tipos(saida, incorporar, zero_shot, Path(args.destino), REGULARIZACAO.get(args.categoria, 1.0))
             (saida / "relatorio.json").write_text(json.dumps(relatorio, indent=1, ensure_ascii=False), encoding="utf-8")
             print(json.dumps(relatorio, indent=1, ensure_ascii=False))
     except (ErroPipeline, OSError, FileNotFoundError) as erro:

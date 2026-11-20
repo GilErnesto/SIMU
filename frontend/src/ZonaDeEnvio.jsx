@@ -12,7 +12,7 @@ function plural(n, singular, pluralTexto) {
   return `${n} ${n === 1 ? singular : pluralTexto}`;
 }
 
-export default function ZonaDeEnvio({ aoEnviar }) {
+export default function ZonaDeEnvio({ aoEnviar, aoComecar }) {
   const [ficheiros, setFicheiros]= useState([]);
   const [ignorados, setIgnorados]= useState(0);
   const [aArrastar, setAArrastar]= useState(false);
@@ -61,6 +61,7 @@ export default function ZonaDeEnvio({ aoEnviar }) {
   }
 
   async function enviar() {
+    aoComecar?.();
     setProgresso(0);
     setErro(null);
     try {
@@ -101,8 +102,9 @@ export default function ZonaDeEnvio({ aoEnviar }) {
       >
         <p className="zona__texto">Largue aqui as fotografias e os vídeos</p>
         <p className="zona__ajuda">
-          Fotografias JPG ou PNG com GPS. Vídeos MP4, MOV, AVI ou WEBM, juntamente com o ficheiro GPX gravado ao mesmo
-          tempo.
+          Fotografias JPG ou PNG, de preferência com GPS. Vídeos MP4, MOV, AVI ou WEBM, de preferência com o ficheiro
+          GPX gravado ao mesmo tempo. Sem GPS ou sem GPX a análise corre na mesma, mas os elementos ficam sem posição
+          no mapa.
         </p>
         <div className="acoes acoes--centro">
           <button type="button" className="botao" disabled={aEnviar} onClick={() => entradaFicheiros.current?.click()}>
@@ -148,7 +150,8 @@ export default function ZonaDeEnvio({ aoEnviar }) {
           </p>
           {videoSemGpx && (
             <p className="aviso">
-              Há vídeos sem ficheiro GPX. Sem ele não é possível saber onde foram filmados.
+              Há vídeos sem ficheiro GPX. A análise corre na mesma, mas os elementos desses vídeos ficam sem posição no
+              mapa.
             </p>
           )}
           <div className="campo">

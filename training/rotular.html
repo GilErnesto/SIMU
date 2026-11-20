@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rotular luzes</title>
+<style>
+:root {
+  --papel: #f4f3ee;
+  --painel: #ffffff;
+  --tinta: #1c2430;
+  --tinta-2: #4a5565;
+  --linha: #d9d7cf;
+  --controlo: #767c86;
+  --acento: #1d4ed8;
+  --erro: #b42318;
+  --poste_luz: #1d4ed8;
+  --candeeiro: #c2410c;
+  --nao_luz: #b42318;
+  --poste_eletrico: #6d28d9;
+  --pendente: #9d00b8;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--papel);
+  color: var(--tinta);
+  font: 16px/1.4 system-ui, sans-serif;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+button, select {
+  font: inherit;
+  color: var(--tinta);
+  min-height: 44px;
+  padding: 0 14px;
+  background: var(--painel);
+  border: 1px solid var(--controlo);
+  border-radius: 4px;
+  cursor: pointer;
+}
+button:hover { background: #ecebe4; }
+button:disabled { color: var(--tinta-2); cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--tinta); outline-offset: 2px; }
+.primario { background: var(--acento); color: #fff; border-color: var(--acento); }
+.primario:hover { background: #1e40af; }
+kbd {
+  font: 600 13px/1 ui-monospace, monospace;
+  padding: 3px 6px;
+  border: 1px solid var(--controlo);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--painel);
+  color: var(--tinta);
+}
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 10px 16px;
+  background: var(--painel);
+  border-bottom: 1px solid var(--linha);
+}
+header h1 { font-size: 18px; margin: 0; }
+#progresso { color: var(--tinta-2); }
+#aviso { min-height: 24px; font-weight: 600; }
+#aviso.erro { color: var(--erro); }
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 16px;
+  min-height: 0;
+}
+#vista {
+  overflow: auto;
+  background: #222;
+  border: 1px solid var(--linha);
+  min-height: 0;
+  max-height: calc(100vh - 110px);
+}
+#palco { position: relative; touch-action: none; cursor: crosshair; }
+#palco img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+.caixa {
+  position: absolute;
+  border: 1px solid var(--pendente);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .85);
+  pointer-events: none;
+}
+#palco:not(.todas) .caixa:not(.selecionada) { display: none; }
+#palco.todas .caixa:not(.selecionada) { opacity: .5; }
+.caixa.selecionada { border-width: 2px; z-index: 2; }
+.caixa.poste_luz { border-color: var(--poste_luz); }
+.caixa.candeeiro { border-color: var(--candeeiro); }
+.caixa.nao_luz { border-color: var(--nao_luz); border-style: dashed; }
+.caixa.poste_eletrico { border-color: var(--poste_eletrico); }
+#recorte { display: block; width: 100%; height: auto; max-height: 220px; object-fit: contain; background: #222; }
+.opcao { display: flex; gap: 8px; align-items: center; min-height: 44px; margin-top: 6px; }
+.opcao input { width: 20px; height: 20px; }
+#previa { position: absolute; border: 1px dashed #fff; background: rgba(255,255,255,.12); pointer-events: none; }
+aside { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; max-height: calc(100vh - 110px); }
+aside section { background: var(--painel); border: 1px solid var(--linha); padding: 12px; }
+aside h2 { font-size: 15px; margin: 0 0 8px; }
+.classes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.classes button { display: flex; gap: 8px; align-items: center; justify-content: flex-start; text-align: left; }
+.classes button[aria-pressed="true"] { outline: 3px solid var(--tinta); outline-offset: 1px; font-weight: 700; }
+#lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+#lista button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 8px; }
+#lista button[aria-current="true"] { outline: 3px solid var(--tinta); outline-offset: 1px; font-weight: 700; }
+.nota { color: var(--tinta-2); font-size: 14px; margin: 6px 0 0; }
+.atalhos { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 14px; margin: 0; }
+.atalhos dt { white-space: nowrap; }
+.atalhos dd { margin: 0; }
+#estado {
+  grid-column: 1 / -1;
+  padding: 40px 16px;
+  text-align: center;
+  background: var(--painel);
+  border: 1px solid var(--linha);
+}
+#estado.erro { color: var(--erro); border-color: var(--erro); }
+[hidden] { display: none !important; }
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  #vista, aside { max-height: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rotular luzes</h1>
+  <label>Lote <select id="lote"></select></label>
+  <span id="progresso" role="status"></span>
+  <span id="aviso" role="status" aria-live="polite"></span>
+</header>
+<main>
+  <div id="estado" role="status">A carregar…</div>
+  <div id="vista" hidden tabindex="0" aria-label="Fotografia a rotular">
+    <div id="palco"></div>
+  </div>
+  <aside hidden>
+    <section>
+      <h2>Recorte</h2>
+      <canvas id="recorte" width="1" height="1" role="img" aria-label="Recorte ampliado da caixa selecionada"></canvas>
+      <p class="nota" id="nota-recorte"></p>
+      <label class="opcao"><input type="checkbox" id="todas"> Mostrar todas as caixas <kbd>T</kbd></label>
+      <label class="opcao"><input type="checkbox" id="auto" checked> Pré-classificar como poste de luz as caixas com confiança de 0,5 ou mais</label>
+    </section>
+    <section>
+      <h2>Caixa selecionada</h2>
+      <div class="classes" id="classes"></div>
+      <p class="nota" id="nota-caixa"></p>
+      <button id="apagar" type="button">Apagar caixa desenhada</button>
+    </section>
+    <section>
+      <h2>Caixas da imagem</h2>
+      <ol id="lista"></ol>
+      <p class="nota" id="vazia" hidden>Sem caixas. Arrasta na fotografia para desenhar uma luz em falta.</p>
+    </section>
+    <section>
+      <button id="gravar" class="primario" type="button">Gravar e seguir <kbd>Enter</kbd></button>
+      <p class="nota">Cada imagem mostra só luzes. Rejeitar uma caixa do modelo é classificá-la como "Não é luz".</p>
+    </section>
+    <section>
+      <h2>Atalhos</h2>
+      <dl class="atalhos">
+        <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Classe da caixa</dd>
+        <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Caixa anterior ou seguinte</dd>
+        <dt><kbd>Enter</kbd></dt><dd>Gravar e seguir</dd>
+        <dt><kbd>B</kbd></dt><dd>Imagem anterior</dd>
+        <dt><kbd>S</kbd></dt><dd>Saltar sem gravar</dd>
+        <dt><kbd>+</kbd> <kbd>-</kbd></dt><dd>Zoom</dd>
+        <dt><kbd>T</kbd></dt><dd>Mostrar ou esconder as outras caixas</dd>
+        <dt><kbd>Del</kbd></dt><dd>Apagar caixa desenhada</dd>
+      </dl>
+    </section>
+  </aside>
+</main>
+<script>
+const CLASSES= [
+  { id: "poste_luz", nome: "Poste de luz", tecla: "1" },
+  { id: "candeeiro", nome: "Candeeiro", tecla: "2" },
+  { id: "nao_luz", nome: "Não é luz", tecla: "3" },
+  { id: "poste_eletrico", nome: "Poste elétrico", tecla: "4" },
+];
+const NOME= Object.fromEntries(CLASSES.map((c) => [c.id, c.nome]));
+const ZOOMS= [1, 1.5, 2, 3, 4, 6];
+const LADO_MIN= 6;
+const MARGEM_RECORTE= 0.15;
+const LARGURA_MIN_RECORTE= 0.6;
+const LIMIAR_AUTO= 0.5;
+const CHAVE_AUTO= "rotular_pre_classificar";
+
+const el= (id) => document.getElementById(id);
+const estado= { lote: null, fila: [], pos: 0, img: null, caixas: [], sel: -1, zoom: 0, desenho: null, a_gravar: false };
+
+function mostrarEstado(texto, erro= false) {
+  const caixa= el("estado");
+  caixa.textContent= texto;
+  caixa.classList.toggle("erro", erro);
+  caixa.hidden= false;
+  el("vista").hidden= true;
+  document.querySelector("aside").hidden= true;
+}
+
+function mostrarEditor() {
+  el("estado").hidden= true;
+  el("vista").hidden= false;
+  document.querySelector("aside").hidden= false;
+}
+
+function aviso(texto, erro= false) {
+  const caixa= el("aviso");
+  caixa.textContent= texto;
+  caixa.classList.toggle("erro", erro);
+}
+
+async function pedir(url, opcoes) {
+  const resposta= await fetch(url, opcoes);
+  if (!resposta.ok) {
+    let detalhe= "";
+    try { detalhe= (await resposta.json()).detail || ""; } catch (e) { detalhe= ""; }
+    throw new Error(detalhe || `Erro ${resposta.status}`);
+  }
+  return resposta.json();
+}
+
+function pendentes() {
+  return estado.caixas.filter((c) => !c.classe).length;
+}
+
+function atualizarProgresso() {
+  const feitas= estado.fila.filter((i) => i.feito).length;
+  el("progresso").textContent= `${feitas} de ${estado.fila.length} imagens feitas`;
+}
+
+function desenharCaixas() {
+  const palco= el("palco");
+  palco.querySelectorAll(".caixa").forEach((n) => n.remove());
+  const { width, height }= estado.img;
+  estado.caixas.forEach((c, i) => {
+    const [x0, y0, x1, y1]= c.bbox;
+    const no= document.createElement("div");
+    no.className= `caixa ${c.classe || ""} ${c.origem} ${i === estado.sel ? "selecionada" : ""}`;
+    no.style.left= `${(x0 / width) * 100}%`;
+    no.style.top= `${(y0 / height) * 100}%`;
+    no.style.width= `${((x1 - x0) / width) * 100}%`;
+    no.style.height= `${((y1 - y0) / height) * 100}%`;
+    palco.append(no);
+  });
+}
+
+function desenharPainel() {
+  const lista= el("lista");
+  lista.textContent= "";
+  estado.caixas.forEach((c, i) => {
+    const item= document.createElement("li");
+    const botao= document.createElement("button");
+    botao.type= "button";
+    if (i === estado.sel) botao.setAttribute("aria-current", "true");
+    const esquerda= document.createElement("span");
+    esquerda.textContent= `${i + 1} · ${c.origem === "modelo" ? `modelo ${c.confianca.toFixed(2).replace(".", ",")}` : "desenhada"}`;
+    const direita= document.createElement("span");
+    direita.textContent= c.classe ? `${NOME[c.classe]}${c.auto ? " (sugerida)" : ""}` : "por classificar";
+    botao.append(esquerda, direita);
+    botao.addEventListener("click", (e) => {
+      selecionar(i);
+      if (e.detail > 0) botao.blur();
+    });
+    item.append(botao);
+    lista.append(item);
+  });
+  el("vazia").hidden= estado.caixas.length > 0;
+  const atual= estado.caixas[estado.sel];
+  document.querySelectorAll("#classes button").forEach((b) => {
+    b.disabled= !atual;
+    b.setAttribute("aria-pressed", String(!!atual && atual.classe === b.dataset.classe));
+  });
+  el("apagar").disabled= !atual || atual.origem !== "manual";
+  el("nota-caixa").textContent= atual ? `Caixa ${estado.sel + 1} de ${estado.caixas.length}.` : "Sem caixa selecionada.";
+  el("gravar").disabled= estado.a_gravar;
+}
+
+function desenharRecorte() {
+  const tela= el("recorte");
+  const atual= estado.caixas[estado.sel];
+  const imagem= el("palco").querySelector("img");
+  if (!atual || !imagem) {
+    tela.width= 1;
+    tela.height= 1;
+    el("nota-recorte").textContent= "Sem caixa selecionada.";
+    return;
+  }
+  const [x0, y0, x1, y1]= atual.bbox;
+  const mx= Math.max((x1 - x0) * MARGEM_RECORTE, 8);
+  const my= Math.max((y1 - y0) * MARGEM_RECORTE, 8);
+  let a= Math.max(0, x0 - mx);
+  const b= Math.max(0, y0 - my);
+  let c= Math.min(estado.img.width, x1 + mx);
+  const d= Math.min(estado.img.height, y1 + my);
+  const falta= LARGURA_MIN_RECORTE * (d - b) - (c - a);
+  if (falta > 0) {
+    a= Math.max(0, a - falta / 2);
+    c= Math.min(estado.img.width, c + falta / 2);
+  }
+  const escala= Math.min(6, 300 / (c - a), 220 / (d - b));
+  const sx= imagem.naturalWidth / estado.img.width;
+  const sy= imagem.naturalHeight / estado.img.height;
+  tela.width= Math.max(1, Math.round((c - a) * escala));
+  tela.height= Math.max(1, Math.round((d - b) * escala));
+  const contexto= tela.getContext("2d");
+  contexto.imageSmoothingQuality= "high";
+  contexto.drawImage(imagem, a * sx, b * sy, (c - a) * sx, (d - b) * sy, 0, 0, tela.width, tela.height);
+  el("nota-recorte").textContent= `Caixa ${estado.sel + 1} de ${estado.caixas.length}, com margem de contexto.`;
+}
+
+function render() {
+  desenharCaixas();
+  desenharPainel();
+  desenharRecorte();
+}
+
+function selecionar(i) {
+  estado.sel= i;
+  render();
+  const no= el("palco").querySelectorAll(".caixa")[i];
+  if (no) no.scrollIntoView({ block: "center", inline: "center" });
+}
+
+function alternarTodas(valor) {
+  el("todas").checked= valor;
+  el("palco").classList.toggle("todas", valor);
+}
+
+function caixaNoPonto(ponto) {
+  let melhor= -1;
+  let area= Infinity;
+  estado.caixas.forEach((c, i) => {
+    const [x0, y0, x1, y1]= c.bbox;
+    const tamanho= (x1 - x0) * (y1 - y0);
+    if (ponto[0] >= x0 && ponto[0] <= x1 && ponto[1] >= y0 && ponto[1] <= y1 && tamanho < area) {
+      melhor= i;
+      area= tamanho;
+    }
+  });
+  return melhor;
+}
+
+function classificar(classe) {
+  const atual= estado.caixas[estado.sel];
+  if (!atual) return;
+  atual.classe= classe;
+  atual.auto= false;
+  const proxima= estado.caixas.findIndex((c, i) => i !== estado.sel && !c.classe);
+  if (proxima >= 0) {
+    selecionar(proxima);
+  } else {
+    render();
+    aviso("Tudo classificado. Enter grava e segue.");
+  }
+}
+
+function apagarDesenhada() {
+  const atual= estado.caixas[estado.sel];
+  if (!atual || atual.origem !== "manual") return;
+  estado.caixas.splice(estado.sel, 1);
+  estado.sel= estado.caixas.length ? Math.min(estado.sel, estado.caixas.length - 1) : -1;
+  render();
+}
+
+function aplicarZoom() {
+  el("palco").style.width= `${ZOOMS[estado.zoom] * 100}%`;
+}
+
+function mudarZoom(passo) {
+  estado.zoom= Math.max(0, Math.min(ZOOMS.length - 1, estado.zoom + passo));
+  aplicarZoom();
+}
+
+async function carregarImagem() {
+  const item= estado.fila[estado.pos];
+  if (!item) {
+    mostrarEstado("Todas as imagens deste lote estão feitas. Escolhe outro lote.");
+    return;
+  }
+  mostrarEstado("A carregar imagem…");
+  try {
+    const dados= await pedir(`/api/lotes/${estado.lote}/imagens/${item.id}`);
+    estado.img= dados;
+    const preencher= el("auto").checked;
+    const base= dados.caixas
+      ? dados.caixas.map((c) => ({ ...c }))
+      : dados.deteccoes.map((d) => {
+          const sugerida= preencher && d.confianca >= LIMIAR_AUTO;
+          return { bbox: d.bbox, classe: sugerida ? "poste_luz" : null, auto: sugerida, origem: "modelo", confianca: d.confianca };
+        });
+    base.forEach((c) => {
+      if (c.origem === "modelo" && c.confianca === undefined) {
+        const d= dados.deteccoes.find((x) => x.bbox.every((v, k) => Math.abs(v - c.bbox[k]) < 0.5));
+        c.confianca= d ? d.confianca : 0;
+      }
+    });
+    estado.caixas= base;
+    estado.sel= base.findIndex((c) => !c.classe);
+    if (estado.sel < 0 && base.length) estado.sel= 0;
+    const palco= el("palco");
+    palco.textContent= "";
+    const imagem= new Image();
+    imagem.alt= `Fotografia ${item.id}`;
+    imagem.draggable= false;
+    await new Promise((resolve, reject) => {
+      imagem.onload= resolve;
+      imagem.onerror= () => reject(new Error("Não foi possível abrir a fotografia."));
+      imagem.src= `/api/lotes/${estado.lote}/imagens/${item.id}/jpg`;
+    });
+    palco.append(imagem);
+    mostrarEditor();
+    aplicarZoom();
+    render();
+    el("vista").scrollTo(0, 0);
+    atualizarProgresso();
+    const sugeridas= base.filter((c) => c.auto).length;
+    const por= pendentes();
+    aviso(
+      `Imagem ${item.id} · ${item.origem === "incerteza" ? "escolhida por incerteza" : "aleatória"} · ${estado.img.camera_type === "spherical" ? "panorama" : "perspetiva"}` +
+        (sugeridas ? ` · ${sugeridas} pré-classificadas` : "") +
+        (por ? ` · ${por} por rever` : " · Enter grava e segue"),
+    );
+    const seguinte= estado.fila[estado.pos + 1];
+    if (seguinte) new Image().src= `/api/lotes/${estado.lote}/imagens/${seguinte.id}/jpg`;
+  } catch (erro) {
+    mostrarEstado(`Erro: ${erro.message}`, true);
+  }
+}
+
+async function gravar() {
+  if (estado.a_gravar || !estado.img) return;
+  const por= pendentes();
+  if (por > 0) {
+    selecionar(estado.caixas.findIndex((c) => !c.classe));
+    aviso(por === 1 ? "Falta 1 caixa por classificar." : `Faltam ${por} caixas por classificar.`, true);
+    return;
+  }
+  estado.a_gravar= true;
+  desenharPainel();
+  try {
+    await pedir(`/api/lotes/${estado.lote}/imagens/${estado.img.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caixas: estado.caixas.map((c) => ({ bbox: c.bbox, classe: c.classe, origem: c.origem, auto: !!c.auto })) }),
+    });
+    estado.fila[estado.pos].feito= true;
+    estado.pos= proximaPorFazer(estado.pos + 1);
+    estado.a_gravar= false;
+    await carregarImagem();
+  } catch (erro) {
+    estado.a_gravar= false;
+    desenharPainel();
+    aviso(`Não gravou: ${erro.message}`, true);
+  }
+}
+
+function proximaPorFazer(de) {
+  const i= estado.fila.findIndex((item, k) => k >= de && !item.feito);
+  return i >= 0 ? i : estado.fila.length;
+}
+
+function saltar(passo) {
+  const destino= estado.pos + passo;
+  if (destino < 0 || destino >= estado.fila.length) return;
+  estado.pos= destino;
+  carregarImagem();
+}
+
+function pontoNaImagem(e) {
+  const r= el("palco").getBoundingClientRect();
+  return [
+    Math.max(0, Math.min(estado.img.width, ((e.clientX - r.left) / r.width) * estado.img.width)),
+    Math.max(0, Math.min(estado.img.height, ((e.clientY - r.top) / r.height) * estado.img.height)),
+  ];
+}
+
+function iniciarDesenho(e) {
+  if (!estado.img || e.button !== 0) return;
+  el("palco").setPointerCapture(e.pointerId);
+  estado.desenho= { inicio: pontoNaImagem(e), fim: pontoNaImagem(e) };
+}
+
+function moverDesenho(e) {
+  if (!estado.desenho) return;
+  estado.desenho.fim= pontoNaImagem(e);
+  const [x0, y0]= estado.desenho.inicio;
+  const [x1, y1]= estado.desenho.fim;
+  let previa= el("previa");
+  if (!previa) {
+    previa= document.createElement("div");
+    previa.id= "previa";
+    el("palco").append(previa);
+  }
+  const { width, height }= estado.img;
+  previa.style.left= `${(Math.min(x0, x1) / width) * 100}%`;
+  previa.style.top= `${(Math.min(y0, y1) / height) * 100}%`;
+  previa.style.width= `${(Math.abs(x1 - x0) / width) * 100}%`;
+  previa.style.height= `${(Math.abs(y1 - y0) / height) * 100}%`;
+}
+
+function terminarDesenho() {
+  const desenho= estado.desenho;
+  estado.desenho= null;
+  const previa= el("previa");
+  if (previa) previa.remove();
+  if (!desenho) return;
+  const [x0, y0]= desenho.inicio;
+  const [x1, y1]= desenho.fim;
+  if (Math.abs(x1 - x0) < LADO_MIN || Math.abs(y1 - y0) < LADO_MIN) {
+    if (el("todas").checked) {
+      const i= caixaNoPonto(desenho.fim);
+      if (i >= 0) selecionar(i);
+    }
+    return;
+  }
+  estado.caixas.push({ bbox: [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)], classe: null, origem: "manual" });
+  selecionar(estado.caixas.length - 1);
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (["SELECT", "INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if (el("vista").hidden && e.key !== "Enter") return;
+  const classe= CLASSES.find((c) => c.tecla === e.key);
+  if (classe) {
+    classificar(classe.id);
+  } else if (e.key === "ArrowRight" && estado.caixas.length) {
+    selecionar((estado.sel + 1) % estado.caixas.length);
+  } else if (e.key === "ArrowLeft" && estado.caixas.length) {
+    selecionar((estado.sel - 1 + estado.caixas.length) % estado.caixas.length);
+  } else if (e.key === "Enter" && !(document.activeElement.tagName === "BUTTON")) {
+    gravar();
+  } else if (e.key === "b" || e.key === "B") {
+    saltar(-1);
+  } else if (e.key === "s" || e.key === "S") {
+    saltar(1);
+  } else if (e.key === "+" || e.key === "=") {
+    mudarZoom(1);
+  } else if (e.key === "-") {
+    mudarZoom(-1);
+  } else if (e.key === "t" || e.key === "T") {
+    alternarTodas(!el("todas").checked);
+  } else if (e.key === "Delete") {
+    apagarDesenhada();
+  } else {
+    return;
+  }
+  e.preventDefault();
+});
+
+async function abrirLote(lote) {
+  estado.lote= lote;
+  mostrarEstado("A carregar fila…");
+  try {
+    estado.fila= await pedir(`/api/lotes/${lote}/fila`);
+    estado.pos= proximaPorFazer(0);
+    atualizarProgresso();
+    if (!estado.fila.length) {
+      mostrarEstado("Este lote não tem imagens descarregadas.");
+      return;
+    }
+    await carregarImagem();
+  } catch (erro) {
+    mostrarEstado(`Erro: ${erro.message}`, true);
+  }
+}
+
+async function iniciar() {
+  CLASSES.forEach((c) => {
+    const botao= document.createElement("button");
+    botao.type= "button";
+    botao.dataset.classe= c.id;
+    botao.innerHTML= `<kbd>${c.tecla}</kbd> `;
+    botao.append(c.nome);
+    botao.addEventListener("click", (e) => {
+      classificar(c.id);
+      if (e.detail > 0) botao.blur();
+    });
+    el("classes").append(botao);
+  });
+  el("apagar").addEventListener("click", apagarDesenhada);
+  try {
+    el("auto").checked= localStorage.getItem(CHAVE_AUTO) !== "0";
+  } catch (e) {
+    el("auto").checked= true;
+  }
+  el("auto").addEventListener("change", (e) => {
+    try {
+      localStorage.setItem(CHAVE_AUTO, e.target.checked ? "1" : "0");
+    } catch (erro) {
+      aviso("Não foi possível guardar a opção neste browser.", true);
+    }
+    e.target.blur();
+    aviso("A opção vale a partir da próxima imagem.");
+  });
+  el("todas").addEventListener("change", (e) => {
+    alternarTodas(e.target.checked);
+    e.target.blur();
+  });
+  el("gravar").addEventListener("click", (e) => {
+    gravar();
+    if (e.detail > 0) e.currentTarget.blur();
+  });
+  const palco= el("palco");
+  palco.addEventListener("pointerdown", iniciarDesenho);
+  palco.addEventListener("pointermove", moverDesenho);
+  palco.addEventListener("pointerup", terminarDesenho);
+  palco.addEventListener("pointercancel", () => { estado.desenho= null; });
+  try {
+    const lotes= await pedir("/api/lotes");
+    if (!lotes.length) {
+      mostrarEstado("Não há lotes em data/avaliacao com deteccoes.jsonl. Corre primeiro pipeline.bancada.");
+      return;
+    }
+    const seletor= el("lote");
+    lotes.forEach((l) => {
+      const opcao= document.createElement("option");
+      opcao.value= l.lote;
+      opcao.textContent= `${l.lote} (${l.feitas} feitas)`;
+      seletor.append(opcao);
+    });
+    seletor.addEventListener("change", () => abrirLote(seletor.value));
+    await abrirLote(lotes[0].lote);
+  } catch (erro) {
+    mostrarEstado(`Erro: ${erro.message}`, true);
+  }
+}
+iniciar();
+</script>
+</body>
+</html>

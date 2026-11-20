@@ -1,0 +1,62 @@
+.dialogo.zona-dialogo {
+  width: min(48rem, calc(100vw - 24px));
+  max-height: 92dvh;
+  overflow-y: auto;
+}
+
+.zona-dialogo__cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espaco-3);
+  margin-bottom: var(--espaco-3);
+}
+
+.zona-dialogo__cabeca .dialogo__titulo {
+  margin-bottom: 0;
+}
+
+.zona-painel__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-3);
+}
+
+.zona-painel__form .campo {
+  flex: none;
+}
+
+.zona-painel__medida {
+  margin: 0;
+  font-weight: 700;
+}
+
+.zona-mapa {
+  width: 100%;
+  height: 22rem;
+  background: var(--relevo);
+  border-radius: var(--raio-controlo);
+}
+
+.zona-mapa.leaflet-container {
+  cursor: crosshair;
+}
+
+.zona-retangulo {
+  fill: var(--acento);
+  fill-opacity: 0.15;
+  stroke: var(--acento);
+  stroke-width: 3;
+}
+
+.zona-canto {
+  fill: var(--acento);
+  stroke: var(--painel);
+  stroke-width: 2;
+}
+
+@media (max-width: 40rem) {
+  .zona-mapa {
+    height: 16rem;
+  }
+}

@@ -8,7 +8,7 @@ export function contarFiltros(filtros) {
   return Object.values(filtros).filter(Boolean).length;
 }
 
-export default function Filtros({ config, filtros, mostrados, total, aoMudar, aoLimpar, aoFechar }) {
+export default function Filtros({ config, filtros, mostrados, total, aoMudar, aoLimpar, aoFechar, compacto= false }) {
   const primeiro= useRef(null);
   const categorias= Object.keys(config.categorias);
 
@@ -21,7 +21,7 @@ export default function Filtros({ config, filtros, mostrados, total, aoMudar, ao
   }
 
   return (
-    <section id="painel-filtros" className="filtros" aria-label="Filtros">
+    <section id="painel-filtros" className={compacto ? "filtros filtros--compacto" : "filtros"} aria-label="Filtros">
       <div className="filtros__grelha">
         <div className="campo">
           <label htmlFor="filtro-categoria">Categoria</label>
@@ -103,9 +103,11 @@ export default function Filtros({ config, filtros, mostrados, total, aoMudar, ao
           <button type="button" className="botao botao--secundario" onClick={aoLimpar}>
             Limpar filtros
           </button>
-          <button type="button" className="botao" onClick={aoFechar}>
-            Fechar
-          </button>
+          {!compacto && (
+            <button type="button" className="botao" onClick={aoFechar}>
+              Fechar
+            </button>
+          )}
         </div>
       </div>
     </section>

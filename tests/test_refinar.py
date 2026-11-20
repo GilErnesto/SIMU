@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from pipeline.config import load_classes
+from pipeline.detect.cabeca import Cabeca
 from pipeline.models import Detection
 
 torch= pytest.importorskip("torch")
@@ -28,8 +29,9 @@ class ProcessadorFalso:
 
 
 class ModeloFalso:
-    def __init__(self, logits):
+    def __init__(self, logits, embeddings= None):
         self.logits= logits
+        self.embeddings= embeddings
 
     def __call__(self, **_):
         class Saida:
@@ -37,6 +39,8 @@ class ModeloFalso:
 
         saida= Saida()
         saida.logits_per_image= torch.tensor(self.logits, dtype=torch.float32)
+        if self.embeddings is not None:
+            saida.image_embeds= torch.tensor(self.embeddings, dtype=torch.float32)
         return saida
 
 
@@ -145,6 +149,30 @@ def test_recorte_demasiado_pequeno_e_ignorado():
     assert refinador.processor.chamadas == []
 
 
+def test_luz_pequena_mas_acima_do_minimo_da_luz_vai_ao_classificador():
+    refinador= _refinador([_logits_para("iluminacao", "candeeiro")])
+    luz= _det("iluminacao", "luz", caixa= (10.0, 10.0, 18.0, 40.0))
+    resultado= DuasFases(DetetorFalso([luz]), refinador, CLASSES).detect("img", _imagem())
+    assert [d.class_name for d in resultado] == ["candeeiro"]
+    assert len(refinador.processor.chamadas) == 1
+
+
+def test_o_minimo_da_luz_nao_se_aplica_aos_sinais():
+    refinador= _refinador([_logits_para("sinal", "stop")])
+    sinal= _det("sinal", "outro", caixa= (10.0, 10.0, 18.0, 40.0))
+    resultado= DuasFases(DetetorFalso([sinal]), refinador, CLASSES).detect("img", _imagem())
+    assert [d.class_name for d in resultado] == ["outro"]
+    assert refinador.processor.chamadas == []
+    assert CLASSES.categorias["iluminacao"].lado_minimo_px == 8
+    assert CLASSES.categorias["sinal"].lado_minimo_px is None
+
+
+def test_recortar_aceita_um_minimo_proprio():
+    imagem= _imagem()
+    assert recortar(imagem, (10.0, 10.0, 18.0, 40.0)) is None
+    assert recortar(imagem, (10.0, 10.0, 18.0, 40.0), 8) is not None
+
+
 def test_recortar_respeita_os_limites():
     recorte= recortar(_imagem(), (0.0, 0.0, 300.0, 200.0))
     assert recorte.shape[:2] == (200, 300)
@@ -213,3 +241,12 @@ def test_varios_textos_do_mesmo_tipo_somam_a_probabilidade():
     previsto= _refinador([linha]).classificar("sinal", [_imagem()])
     assert previsto[0][0] == "informacao"
     assert previsto[0][1] > 0.4
+
+
+def test_cabeca_de_iluminacao_descarta_nao_luz_e_mantem_poste_luz():
+    cabeca= Cabeca(["nao_luz", "poste_luz"], np.array([[5.0, 0.0], [0.0, 5.0]]), np.zeros(2))
+    for embedding, esperado in (([1.0, 0.0], []), ([0.0, 1.0], ["poste_luz"])):
+        modelo= ModeloFalso([[0.0] * _total("iluminacao")], [embedding])
+        refinador= Refinador(ProcessadorFalso(), modelo, CLASSES, 0.5, cabecas={"iluminacao": cabeca})
+        resultado= DuasFases(DetetorFalso([_det("iluminacao", "luz")]), refinador, CLASSES).detect("img", _imagem())
+        assert [d.class_name for d in resultado] == esperado

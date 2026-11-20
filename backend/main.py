@@ -15,10 +15,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.deps import anon_dir, get_classes, get_engine, get_municipio, get_session, raw_dir
-from pipeline.catalog import analises
+from pipeline.catalog import analises, revisao
 from pipeline.catalog.export import to_csv, to_feature, to_geojson
 from pipeline.catalog.write import Analise, Correcao, Elemento, Imagem, Observacao, ensure_schema
-from pipeline.config import Classes, Municipio
+from pipeline.config import ZONA_MAX_GRAUS, Classes, Municipio, aplicar_bbox
 from pipeline.errors import ErroPipeline
 from pipeline.ingest.uploads import tipo_de
 
@@ -32,7 +32,7 @@ async def ciclo_de_vida(_):
     yield
 
 
-app= FastAPI(title="Ctrl + F", lifespan=ciclo_de_vida)
+app= FastAPI(title="SIMU", lifespan=ciclo_de_vida)
 
 
 @app.exception_handler(ErroPipeline)
@@ -54,6 +54,21 @@ class CorrecaoPedido(BaseModel):
         if self.classe is None and self.lon is None and self.estado is None:
             raise ValueError("Nada para corrigir: indique classe, posição ou estado")
         return self
+
+
+class JuntarPedido(BaseModel):
+    autor: str= Field(min_length=1, max_length=128)
+    origem: int
+
+
+class SepararPedido(BaseModel):
+    autor: str= Field(min_length=1, max_length=128)
+    observacoes: list[int]
+
+
+class ZonaPedido(BaseModel):
+    bbox: list[float]= Field(min_length=4, max_length=4)
+    nome: str= ""
 
 
 def _bbox(valor: str | None) -> tuple[float, float, float, float] | None:
@@ -85,6 +100,13 @@ def _elemento(sessao: Session, elemento_id: int) -> Elemento:
     return elemento
 
 
+def _area(observacao: Observacao) -> float:
+    if not observacao.bbox or len(observacao.bbox) != 4:
+        return 0.0
+    x1, y1, x2, y2= observacao.bbox
+    return (x2 - x1) * (y2 - y1)
+
+
 def _detalhe(elemento: Elemento) -> dict:
     feature= to_feature(elemento)
     feature["properties"]["observacoes"]= [
@@ -104,7 +126,7 @@ def _detalhe(elemento: Elemento) -> dict:
                 "url": f"/imagens/{obs.imagem.id}" if obs.imagem.caminho_anon else None,
             },
         }
-        for obs in elemento.observacoes
+        for obs in sorted(elemento.observacoes, key=_area, reverse=True)
     ]
     return feature
 
@@ -206,6 +228,26 @@ def corrigir(
         )
     sessao.commit()
     return _detalhe(_elemento(sessao, elemento_id))
+
+
+@app.post("/elementos/{elemento_id}/juntar")
+def juntar_elementos(elemento_id: int, pedido: JuntarPedido, sessao: Session= Depends(get_session)):
+    try:
+        revisao.juntar(sessao, elemento_id, pedido.origem, pedido.autor)
+    except revisao.ErroRevisao as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+    sessao.commit()
+    return _detalhe(_elemento(sessao, elemento_id))
+
+
+@app.post("/elementos/{elemento_id}/separar")
+def separar_elemento(elemento_id: int, pedido: SepararPedido, sessao: Session= Depends(get_session)):
+    try:
+        _, novo= revisao.separar(sessao, elemento_id, pedido.observacoes, pedido.autor)
+    except revisao.ErroRevisao as erro:
+        raise HTTPException(erro.codigo, str(erro)) from erro
+    sessao.commit()
+    return {"original": _detalhe(_elemento(sessao, elemento_id)), "novo": _detalhe(_elemento(sessao, novo.id))}
 
 
 @app.get("/imagens/{imagem_id}")
@@ -355,7 +397,7 @@ async def criar_analise(
         shutil.rmtree(pasta, ignore_errors=True)
         raise
     if guardados["video"] and not guardados["gpx"]:
-        avisos.append("Enviou vídeo sem ficheiro GPX: sem ele não é possível localizar os elementos do vídeo")
+        avisos.append("Enviou vídeo sem ficheiro GPX: vai ser analisado, mas os elementos ficam sem posição no mapa")
     analise= analises.criar(
         sessao,
         nome.strip()[:120] or "Análise sem nome",
@@ -363,6 +405,26 @@ async def criar_analise(
         avisos,
         token=token,
     )
+    return {"token": analise.token, "url": f"/a/{analise.token}", "estado": analise.estado}
+
+
+@app.post("/analises/zona", status_code=201)
+def criar_analise_zona(
+    pedido: ZonaPedido,
+    sessao: Session= Depends(get_session),
+    municipio: Municipio= Depends(get_municipio),
+):
+    try:
+        zona= aplicar_bbox(municipio, ",".join(str(valor) for valor in pedido.bbox))
+    except ErroPipeline as erro:
+        raise HTTPException(422, str(erro)) from erro
+    lon_min, lat_min, lon_max, lat_max= zona.bbox
+    if lon_max - lon_min > ZONA_MAX_GRAUS or lat_max - lat_min > ZONA_MAX_GRAUS:
+        raise HTTPException(422, "A zona é grande demais: no máximo cerca de 2 km de lado.")
+    nome= pedido.nome.strip()[:120] or (
+        f"Mapillary, {(lat_min + lat_max) / 2:.4f}, {(lon_min + lon_max) / 2:.4f}"
+    )
+    analise= analises.criar(sessao, nome, {"fonte": "mapillary", "bbox": pedido.bbox})
     return {"token": analise.token, "url": f"/a/{analise.token}", "estado": analise.estado}
 
 
@@ -378,6 +440,19 @@ def obter_analise(token: str, sessao: Session= Depends(get_session)):
     if analise is None:
         raise HTTPException(404, "Análise não encontrada")
     return _analise_json(analise)
+
+
+@app.get("/analises/{token}/duplicados")
+def duplicados_da_analise(
+    token: str,
+    raio: float= Query(default=revisao.RAIO_DUPLICADOS_M, gt=0, le=30),
+    sessao: Session= Depends(get_session),
+    municipio: Municipio= Depends(get_municipio),
+):
+    analise= analises.obter_por_token(sessao, token)
+    if analise is None:
+        raise HTTPException(404, "Análise não encontrada")
+    return revisao.duplicados(sessao, analise.id, municipio.crs_metrico, raio)
 
 
 @app.delete("/analises/{token}")

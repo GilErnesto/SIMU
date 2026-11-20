@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 from pipeline.catalog.export import to_csv, to_feature, to_geojson
 from pipeline.catalog.write import (
     Elemento,
+    Observacao,
     element_confidence,
     ensure_schema,
     known_image_ids,
     write_catalog,
 )
-from pipeline.config import load_classes
+from pipeline.config import calibrar_confianca, load_classes
 from pipeline.models import Detection, Element, ImageRecord, Observation
 
 CLASSES= load_classes(Path(__file__).parents[1] / "config" / "classes.yaml")
@@ -86,7 +87,9 @@ def test_elemento_repetido_nao_duplica(sessao):
     linhas= sessao.query(Elemento).filter(Elemento.classe == "candeeiro").all()
     assert len(linhas) == 1
     assert linhas[0].n_observacoes == 2
-    assert linhas[0].confianca == pytest.approx(0.7 * (1 - 0.25**2))
+    luz= CLASSES.categorias["iluminacao"]
+    media= (calibrar_confianca(luz, 0.8) + calibrar_confianca(luz, 0.6)) / 2
+    assert linhas[0].confianca == pytest.approx(media * (1 - 0.25**2))
     assert known_image_ids(sessao, "mapillary") >= {"t-a", "t-b"}
 
 
@@ -98,6 +101,31 @@ def test_elementos_distantes_ficam_separados(sessao):
         [_elemento(a, -8.65, 40.64, 0.8), _elemento(b, -8.66, 40.64, 0.8)],
     )
     assert sessao.query(Elemento).filter(Elemento.classe == "candeeiro").count() == 2
+
+
+@precisa_bd
+def test_elementos_proximos_da_mesma_gravacao_nao_se_juntam(sessao):
+    a, b= _registo("t-g"), _registo("t-h")
+    write_catalog(
+        sessao, CLASSES, [a, b],
+        [_elemento(a, -8.65, 40.64, 0.8), _elemento(b, -8.65002, 40.64001, 0.8)],
+    )
+    assert sessao.query(Elemento).filter(Elemento.classe == "candeeiro").count() == 2
+
+
+@precisa_bd
+def test_observacao_guarda_confianca_calibrada_so_na_iluminacao(sessao):
+    a= _registo("t-e")
+    luz= _elemento(a, -8.65, 40.64, 0.8)
+    sinal= Element(
+        "sinal", "stop", -8.66, 40.64, False, "monocular",
+        [Observation(Detection(a.id, "sinal", "stop", (1, 2, 3, 4), 0.8, False), a, 10.0)],
+    )
+    write_catalog(sessao, CLASSES, [a], [luz, sinal])
+    confianca_luz= sessao.query(Observacao).filter(Observacao.classe == "candeeiro").one().confianca
+    confianca_sinal= sessao.query(Observacao).filter(Observacao.classe == "stop").one().confianca
+    assert confianca_luz == pytest.approx(0.98 + 0.01 / 3)
+    assert confianca_sinal == pytest.approx(0.8)
 
 
 @precisa_bd

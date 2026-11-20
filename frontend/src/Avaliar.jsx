@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Foto } from "./Fotos.jsx";
+import { ImagemComCaixa } from "./Fotos.jsx";
+import { IconeFechar } from "./icones.jsx";
+import Juntar from "./Juntar.jsx";
 import { lerNumero, rotuloClasse, rotuloEstado } from "./rotulos.js";
+import { Ligacao } from "./rota.js";
+
+const FOTOS_NA_TIRA= 4;
 
 function aoFocar(evento) {
   evento.currentTarget.scrollIntoView({ block: "center" });
@@ -13,11 +18,13 @@ export default function Avaliar({
   tecnico,
   modoMover,
   candidata,
-  aoMudarTecnico,
   aoGuardar,
   aoFechar,
   aoAlternarMover,
   aoMudarCandidata,
+  vizinhos,
+  aoJuntar,
+  aoAmpliar,
 }) {
   const titulo= useRef(null);
   const [escolhida, setEscolhida]= useState(null);
@@ -32,7 +39,7 @@ export default function Avaliar({
   const campoLon= candidata ? candidata.lon : lon === null ? "" : lon.toFixed(6);
 
   useEffect(() => {
-    titulo.current?.focus();
+    titulo.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {
@@ -40,17 +47,34 @@ export default function Avaliar({
     setMensagem(null);
   }, [p.id]);
 
+  function exigirNome() {
+    if (tecnico.trim()) return true;
+    setMensagem({ tipo: "erro", texto: "Indique o nome do técnico na página inicial.", ligacao: true });
+    return false;
+  }
+
   async function executar(corpo) {
-    if (!tecnico.trim()) {
-      setMensagem({ tipo: "erro", texto: "Indique o seu nome antes de guardar." });
-      return;
-    }
+    if (!exigirNome()) return;
     setAGuardar(true);
     setMensagem(null);
     try {
       await aoGuardar({ ...corpo, autor: tecnico.trim() });
       setEscolhida(null);
       setMensagem({ tipo: "ok", texto: "Alteração guardada." });
+    } catch (erro) {
+      setMensagem({ tipo: "erro", texto: erro.message });
+    } finally {
+      setAGuardar(false);
+    }
+  }
+
+  async function juntarComVizinho(origemId) {
+    if (!exigirNome()) return;
+    setAGuardar(true);
+    setMensagem(null);
+    try {
+      await aoJuntar(origemId, tecnico.trim());
+      setMensagem({ tipo: "ok", texto: "Elementos juntados." });
     } catch (erro) {
       setMensagem({ tipo: "erro", texto: erro.message });
     } finally {
@@ -68,28 +92,41 @@ export default function Avaliar({
     executar({ lat: novaLat, lon: novaLon });
   }
 
+  const fotos= p.observacoes.slice(0, FOTOS_NA_TIRA);
+
   return (
-    <aside className="avaliar" role="dialog" aria-modal="false" aria-labelledby="titulo-avaliar" data-a-escolher={modoMover}>
+    <section className="avaliar" aria-labelledby="titulo-avaliar" data-a-escolher={modoMover}>
       <div className="avaliar__cabeca">
-        <h2 id="titulo-avaliar" className="painel__titulo" ref={titulo} tabIndex={-1}>
-          Avaliar: {rotuloClasse(config, p.categoria, p.classe)}
-        </h2>
-        <button type="button" className="botao botao--secundario" onClick={aoFechar}>
-          Fechar
+        <div>
+          <h2 id="titulo-avaliar" className="painel__titulo" ref={titulo} tabIndex={-1}>
+            Avaliar: {rotuloClasse(config, p.categoria, p.classe)}
+          </h2>
+          <p className="nota">Elemento n.º {p.id}. Estado atual: {rotuloEstado(p.estado)}.</p>
+        </div>
+        <button type="button" className="botao botao--icone avaliar__fechar" aria-label="Fechar a avaliação" onClick={aoFechar}>
+          <IconeFechar />
         </button>
       </div>
-      <p className="nota">Estado atual: {rotuloEstado(p.estado)}. Cada alteração fica registada com o seu nome.</p>
 
-      {p.observacoes.length > 0 && (
-        <div className="avaliar__foto">
-          <Foto observacao={p.observacoes[0]} />
-        </div>
+      {fotos.length > 0 && (
+        <ul className="tira" aria-label="Fotografias do elemento">
+          {fotos.map((observacao, indice) => (
+            <li key={observacao.id}>
+              <button
+                type="button"
+                className="tira__foto"
+                aria-label={`Ampliar a fotografia ${indice + 1} de ${p.observacoes.length}`}
+                onClick={() => aoAmpliar(indice)}
+              >
+                <ImagemComCaixa observacao={observacao} />
+              </button>
+            </li>
+          ))}
+          {p.observacoes.length > FOTOS_NA_TIRA && (
+            <li className="tira__mais nota">+{p.observacoes.length - FOTOS_NA_TIRA}</li>
+          )}
+        </ul>
       )}
-
-      <div className="campo">
-        <label htmlFor="tecnico">O seu nome</label>
-        <input id="tecnico" autoComplete="name" value={tecnico} onFocus={aoFocar} onChange={(e) => aoMudarTecnico(e.target.value)} />
-      </div>
 
       <section className="bloco" aria-labelledby="titulo-decisao">
         <h3 id="titulo-decisao" className="bloco__titulo">
@@ -134,8 +171,7 @@ export default function Avaliar({
         </h3>
         {semPosicao && (
           <p className="nota">
-            Este elemento não tem posição porque a fotografia não tem GPS. Escreva as coordenadas ou escolha o ponto no
-            mapa.
+            Este elemento não tem posição porque a fotografia não tem GPS. Escreva as coordenadas ou escolha o ponto no mapa.
           </p>
         )}
         <div className="campos-par">
@@ -158,9 +194,19 @@ export default function Avaliar({
         </div>
       </section>
 
+      <details className="recolhido">
+        <summary>Juntar com outro elemento{vizinhos.length > 0 ? ` (${vizinhos.length} perto)` : ""}</summary>
+        <Juntar config={config} vizinhos={vizinhos} desativado={aGuardar} aoJuntar={juntarComVizinho} semTitulo />
+      </details>
+
       <div className="estado-guardar" role={mensagem?.tipo === "erro" ? "alert" : "status"}>
         {mensagem && <p className={mensagem.tipo === "erro" ? "mensagem--erro" : "mensagem--ok"}>{mensagem.texto}</p>}
+        {mensagem?.ligacao && (
+          <Ligacao para="/" className="botao botao--ligacao">
+            Ir para a página inicial
+          </Ligacao>
+        )}
       </div>
-    </aside>
+    </section>
   );
 }
