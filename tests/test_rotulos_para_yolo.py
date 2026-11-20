@@ -99,3 +99,36 @@ def test_limite_usa_so_as_primeiras_imagens(base, tmp_path):
     contagem= exportador.exportar(base, ["zona"], {"zona"}, tmp_path / "saida", {"zona": 1})
     assert contagem["imagem_fora_do_limite"] == 2
     assert contagem["yolo_val"] == 1
+
+
+def test_lote_de_residuos_usa_caixas_manuais_e_ignora_pseudo_de_residuos(tmp_path):
+    luz= {"category": "iluminacao", "class_name": "luz", "bbox_xyxy": [500, 50, 530, 300], "confidence": 0.9}
+    contentor= {"category": "residuos", "class_name": "contentor", "bbox_xyxy": [300, 200, 380, 300], "confidence": 0.8}
+    sinal= {"category": "sinal", "class_name": "stop", "bbox_xyxy": [10, 10, 60, 60], "confidence": 0.9}
+    escrever_lote(
+        tmp_path,
+        "res",
+        [("1", "perspective", [caixa("ilha_reciclagem", (100, 200, 200, 300)), caixa("nao_residuo", (300, 200, 380, 300))], [luz, contentor, sinal])],
+    )
+    rotulos= tmp_path / "rotulos" / "res.jsonl"
+    registo= json.loads(rotulos.read_text(encoding="utf-8"))
+    registo["categoria"]= "residuos"
+    rotulos.write_text(json.dumps(registo), encoding="utf-8")
+
+    saida= tmp_path / "saida"
+    exportador.exportar(tmp_path, ["res"], {"res"}, saida)
+    linhas= (saida / "labels" / "val" / "res_1.txt").read_text().split("\n")
+    classes= sorted(int(l.split()[0]) for l in linhas if l)
+    # outro (sinal), candeeiro (luz por pseudo-rótulo), contentor (só a ilha manual: o rejeitado não volta)
+    assert classes == [exportador.NOMES.index("outro"), exportador.CLASSE_LUZ, exportador.CLASSE_CONTENTOR]
+    assert len(list((saida / "recortes" / "val" / "ilha_reciclagem").glob("*.jpg"))) == 1
+    assert len(list((saida / "recortes" / "val" / "nao_residuo").glob("*.jpg"))) == 1
+
+
+def test_rotulos_sem_categoria_sao_de_luzes():
+    registo= {"caixas": [caixa("poste_luz")]}
+    pseudo= [("iluminacao", exportador.CLASSE_LUZ, [1, 1, 5, 5]), ("residuos", exportador.CLASSE_CONTENTOR, [9, 9, 20, 20])]
+    assert exportador.caixas_da_imagem(registo, pseudo) == [
+        (exportador.CLASSE_LUZ, [100, 50, 160, 300]),
+        (exportador.CLASSE_CONTENTOR, [9, 9, 20, 20]),
+    ]

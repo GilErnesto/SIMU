@@ -19,7 +19,20 @@ FRACAO_VAL= 5
 CONFIANCA_PSEUDO= 0.5
 LADO_MAX= 4096
 CLASSE_LUZ= NOMES.index("candeeiro")
-LUZ_YOLO= {"poste_luz", "candeeiro"}
+CLASSE_CONTENTOR= NOMES.index("contentor")
+# Classe do rótulo manual -> índice no YOLO. As negativas (nao_luz, nao_residuo) e as
+# que o YOLO não tem (poste_eletrico) ficam de fora: a caixa conta como fundo.
+MANUAIS_YOLO= {
+    "poste_luz": CLASSE_LUZ,
+    "candeeiro": CLASSE_LUZ,
+    "ilha_reciclagem": CLASSE_CONTENTOR,
+    "indiferenciado": CLASSE_CONTENTOR,
+    "papeleira": CLASSE_CONTENTOR,
+    "subterraneo": CLASSE_CONTENTOR,
+    "contentor": CLASSE_CONTENTOR,
+}
+# Rótulos gravados antes de o rotular.py guardar a categoria eram todos de luzes.
+CATEGORIA_PADRAO= "iluminacao"
 DELTA_MAX_GRAUS= 80.0
 VISIVEL_MIN= 0.5
 LADO_VISIVEL_MIN= 4.0
@@ -54,7 +67,8 @@ def ler_rotulos(base: Path, lote: str) -> dict[str, dict]:
     return resultado
 
 
-def ler_pseudo(base: Path, lote: str) -> dict[str, list[tuple[int, list[float]]]]:
+def ler_pseudo(base: Path, lote: str) -> dict[str, list[tuple[str, int, list[float]]]]:
+    """Deteções do modelo com confiança alta, por imagem: (categoria, índice YOLO, caixa)."""
     resultado= {}
     with (base / lote / "deteccoes.jsonl").open(encoding="utf-8") as linhas:
         for linha in linhas:
@@ -67,10 +81,16 @@ def ler_pseudo(base: Path, lote: str) -> dict[str, list[tuple[int, list[float]]]
             for d in registo.get("deteccoes", []):
                 if d.get("confidence", 0) < CONFIANCA_PSEUDO:
                     continue
-                if d.get("category") == "sinal":
-                    itens.append((NOMES.index("semaforo" if d.get("class_name") == "semaforo" else "outro"), d["bbox_xyxy"]))
-                elif d.get("category") == "residuos":
-                    itens.append((NOMES.index("contentor"), d["bbox_xyxy"]))
+                categoria= d.get("category")
+                if categoria == "sinal":
+                    indice= NOMES.index("semaforo" if d.get("class_name") == "semaforo" else "outro")
+                elif categoria == "residuos":
+                    indice= CLASSE_CONTENTOR
+                elif categoria == "iluminacao":
+                    indice= CLASSE_LUZ
+                else:
+                    continue
+                itens.append((categoria, indice, d["bbox_xyxy"]))
             resultado[id_fonte]= itens
     return resultado
 
@@ -117,9 +137,16 @@ def caixa_na_vista(
     return a, b, c, d
 
 
-def caixas_da_imagem(registo: dict, pseudo: list[tuple[int, list[float]]]) -> list[tuple[int, list[float]]]:
-    luzes= [(CLASSE_LUZ, c["bbox"]) for c in registo["caixas"] if c["classe"] in LUZ_YOLO]
-    return luzes + list(pseudo)
+def caixas_da_imagem(registo: dict, pseudo: list[tuple[str, int, list[float]]]) -> list[tuple[int, list[float]]]:
+    """Caixas manuais da categoria rotulada mais pseudo-rótulos das outras categorias.
+
+    Os pseudo-rótulos da categoria rotulada ficam de fora: as caixas manuais já a
+    cobrem, e as que o técnico rejeitou não podem voltar a entrar como positivas.
+    """
+    categoria= registo.get("categoria", CATEGORIA_PADRAO)
+    manuais= [(MANUAIS_YOLO[c["classe"]], c["bbox"]) for c in registo["caixas"] if c["classe"] in MANUAIS_YOLO]
+    outras= [(indice, bbox) for cat, indice, bbox in pseudo if cat != categoria]
+    return manuais + outras
 
 
 def exportar_recortes(imagem, registo: dict, lote: str, id_fonte: str, divisao: str, saida: Path, contagem: Counter) -> None:
@@ -195,12 +222,12 @@ def ler_limites(valores: list[str]) -> dict[str, int]:
 
 
 def main(argv: list[str] | None= None) -> int:
-    parser= argparse.ArgumentParser(description="Exporta rótulos de luzes para YOLO e para a cabeça do CLIP")
+    parser= argparse.ArgumentParser(description="Exporta rótulos (luzes ou resíduos) para YOLO e para a cabeça do CLIP")
     parser.add_argument("--lotes", nargs="+", required=True)
     parser.add_argument("--reservar", nargs="*", default=[], help="lotes só para validação")
     parser.add_argument("--limite", nargs="*", default=[], help="lote:N, usa só as primeiras N imagens rotuladas")
     parser.add_argument("--base", default=str(BASE_PADRAO))
-    parser.add_argument("--saida", default="data/datasets/luz_aveiro")
+    parser.add_argument("--saida", default="data/datasets/luz_aveiro", help="para resíduos, por exemplo data/datasets/residuos_aveiro")
     args= parser.parse_args(argv)
     saida= Path(args.saida)
     contagem= exportar(Path(args.base), args.lotes, set(args.reservar), saida, ler_limites(args.limite))

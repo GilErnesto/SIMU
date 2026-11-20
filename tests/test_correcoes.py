@@ -3,9 +3,27 @@ from training.correcoes import etiqueta, posicao_do_tecnico
 GERAIS= {"luz"}
 
 
-def test_rejeitado_vira_negativo_so_na_iluminacao():
+def test_rejeitado_vira_negativo_na_iluminacao_e_nos_residuos():
     assert etiqueta("rejeitado", "luz", False, "iluminacao", GERAIS) == "nao_luz"
+    assert etiqueta("rejeitado", "contentor", False, "residuos", {"contentor"}) == "nao_residuo"
     assert etiqueta("rejeitado", "stop", False, "sinal", set()) is None
+
+
+def test_negativos_nao_sao_classes_da_categoria():
+    # Se fossem, o DuasFases não descartava a deteção quando a cabeça os prevê.
+    from pathlib import Path
+
+    from pipeline.config import load_classes
+    from training.correcoes import NEGATIVOS
+
+    classes= load_classes(Path("config/classes.yaml"))
+    for categoria, negativo in NEGATIVOS.items():
+        assert negativo not in classes.categorias[categoria].classes
+
+
+def test_residuo_validado_usa_o_subtipo():
+    assert etiqueta("validado", "ilha_reciclagem", False, "residuos", {"contentor"}) == "ilha_reciclagem"
+    assert etiqueta("validado", "contentor", False, "residuos", {"contentor"}) is None
 
 
 def test_validado_usa_a_classe_do_elemento():

@@ -33,6 +33,13 @@ PREPARADORES= 2
 NOME_CHECKPOINT= "checkpoint.jsonl"
 CABECA_SINAL= "models/tipo_sinal.npz"
 CABECA_ILUMINACAO= "models/tipo_iluminacao.npz"
+CABECA_RESIDUOS= "models/tipo_residuos.npz"
+# categoria -> (atributo em args, caminho por omissão)
+CABECAS= {
+    "sinal": ("cabeca_sinal", CABECA_SINAL),
+    "iluminacao": ("cabeca_iluminacao", CABECA_ILUMINACAO),
+    "residuos": ("cabeca_residuos", CABECA_RESIDUOS),
+}
 
 
 def _variavel(nome: str) -> str:
@@ -48,6 +55,20 @@ def tipo_de_detetor(args: argparse.Namespace) -> str:
     return args.detetor
 
 
+def _cabecas(args: argparse.Namespace) -> dict[str, Path]:
+    """Cabeças de tipo a carregar: só as que existem em disco.
+
+    Cada caminho vem de args (por exemplo --cabeca-residuos) ou do valor por
+    omissão; quem não tiver o argumento (worker, run) usa o caminho por omissão.
+    """
+    cabecas= {}
+    for categoria, (atributo, padrao) in CABECAS.items():
+        caminho= Path(getattr(args, atributo, None) or padrao)
+        if caminho.exists():
+            cabecas[categoria]= caminho
+    return cabecas
+
+
 def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
     if tipo_de_detetor(args) == "yolo":
         detetor= Detector.from_weights(Path(args.pesos), classes, limiar=args.limiar)
@@ -58,12 +79,7 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
     if not args.sem_refinar:
         from pipeline.detect.refinar import DuasFases, Refinador
 
-        cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
-        cabecas= {"sinal": cabeca} if cabeca.exists() else {}
-        cabeca_iluminacao= Path(getattr(args, "cabeca_iluminacao", None) or CABECA_ILUMINACAO)
-        if cabeca_iluminacao.exists():
-            cabecas["iluminacao"]= cabeca_iluminacao
-        detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas), classes)
+        detetor= DuasFases(detetor, Refinador.load(classes, limiar=args.limiar_classe, cabecas=_cabecas(args)), classes)
     return Limiares(detetor, classes) if limiares else detetor
 
 

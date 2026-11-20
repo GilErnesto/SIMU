@@ -17,7 +17,10 @@ from pipeline.config import load_classes
 from pipeline.errors import ErroPipeline
 from training.tipos import QUALIDADE_JPEG, divisao_de, recortes_de
 
-NEGATIVOS= {"iluminacao": "nao_luz"}
+# Classe dada aos elementos rejeitados pelo técnico. Não pode estar nas classes da
+# categoria em classes.yaml: é isso que faz o DuasFases descartar a deteção quando
+# a cabeça a prevê.
+NEGATIVOS= {"iluminacao": "nao_luz", "residuos": "nao_residuo"}
 REVISTOS= ("validado", "corrigido", "rejeitado")
 
 
