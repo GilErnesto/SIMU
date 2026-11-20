@@ -1,0 +1,10 @@
+dados: data/datasets/luz_aveiro/data.yaml
+modelo: models/detetor.pt
+epocas: 25
+tempo: 0.75
+imgsz: 1024
+lote: 6
+paciencia: 8
+trabalhadores: 3
+nome: luz_aveiro
+destino: models/detetor_luz.pt

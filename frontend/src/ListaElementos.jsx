@@ -71,14 +71,17 @@ export default function ListaElementos({
   aoSelecionar,
   aoRepetir,
   aoLimpar,
+  semTitulo= false,
 }) {
   const visiveis= lista.features.slice(0, LIMITE);
   return (
-    <section className="lista" aria-labelledby="titulo-lista" id="lista">
-      <h2 id="titulo-lista" className="painel__titulo">
-        Elementos
-        {lista.estado === "ok" && <span className="painel__contagem"> ({lista.features.length})</span>}
-      </h2>
+    <section className="lista" aria-labelledby="titulo-lista">
+      {!semTitulo && (
+        <h2 id="titulo-lista" className="painel__titulo">
+          Elementos
+          {lista.estado === "ok" && <span className="painel__contagem"> ({lista.features.length})</span>}
+        </h2>
+      )}
       <Estado lista={lista} aoRepetir={aoRepetir} aoLimpar={aoLimpar} temFiltros={temFiltros} vazia={vazia} />
       {lista.estado === "ok" && visiveis.length > 0 && (
         <ul className="lista__itens">
@@ -97,7 +100,7 @@ export default function ListaElementos({
                   <span className="item__texto">
                     <span className="item__nome">{rotuloClasse(config, p.categoria, p.classe)}</span>
                     <span className="item__meta">
-                      {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}
+                      n.º {p.id}, {rotuloEstado(p.estado)}, confiança {percentagem(p.confianca)}
                       {p.obstruido ? ", tapado" : ""}
                       {feature.geometry ? "" : ", sem posição"}
                     </span>

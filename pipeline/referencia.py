@@ -9,7 +9,7 @@ import requests
 from dotenv import load_dotenv
 from pyproj import Transformer
 
-from pipeline.config import load_municipio
+from pipeline.config import aplicar_bbox, load_municipio
 from pipeline.errors import ErroPipeline
 from pipeline.ingest.mapillary import tiles
 from pipeline.rotulos_mapillary import classificar
@@ -110,7 +110,8 @@ def para_geojson(pontos: list[dict]) -> dict:
 
 def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.referencia")
-    parser.add_argument("--municipio", required=True, help="ficheiro municipio.yaml")
+    parser.add_argument("--municipio", default="config/municipio.yaml", help="ficheiro municipio.yaml")
+    parser.add_argument("--bbox", default=None, help="lon_min,lat_min,lon_max,lat_max: substitui a bbox do município, sem criar .yaml")
     parser.add_argument("--saida", required=True, help="GeoJSON de referência a escrever")
     parser.add_argument("--incluir-costas", action="store_true", help="conta sinais vistos de trás")
     args= parser.parse_args(argv)
@@ -120,6 +121,7 @@ def main(argv: list[str] | None= None) -> int:
         if not token:
             raise ErroPipeline("Variável de ambiente MAPILLARY_TOKEN em falta. Ver .env.example.")
         municipio= load_municipio(Path(args.municipio))
+        municipio= aplicar_bbox(municipio, args.bbox)
         features= obter_features(municipio.bbox, token)
         pontos= juntar(para_pontos(features, args.incluir_costas), municipio.crs_metrico)
     except (ErroPipeline, requests.RequestException) as erro:

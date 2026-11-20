@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
-from pipeline.config import Classes
+from pipeline.config import Classes, calibrar_confianca
 from pipeline.models import Element, ImageRecord
 
 PESO_OBSERVACOES= 0.25
@@ -179,7 +179,11 @@ def _ponto(lon: float | None, lat: float | None) -> WKTElement | None:
 
 
 def _vizinho(
-    session: Session, elemento: Element, raio_m: float, analise_id: int | None= None
+    session: Session,
+    elemento: Element,
+    raio_m: float,
+    analise_id: int | None= None,
+    excluir: set[int] | None= None,
 ) -> Elemento | None:
     alvo= cast(_ponto(elemento.lon, elemento.lat), Geography)
     distancia= cast(Elemento.geom, Geography)
@@ -188,6 +192,7 @@ def _vizinho(
         .where(
             Elemento.classe == elemento.class_name,
             Elemento.analise_id.is_(None) if analise_id is None else Elemento.analise_id == analise_id,
+            Elemento.id.not_in(excluir or set()),
             func.ST_DWithin(distancia, alvo, raio_m),
         )
         .order_by(func.ST_Distance(distancia, alvo))
@@ -231,9 +236,10 @@ def write_catalog(
         session.add(linha)
         imagens[registo.id]= linha
     session.flush()
+    criados= set()
     for elemento in elements:
         raio= classes.categorias[elemento.category].raio_dedup_m
-        linha= _vizinho(session, elemento, raio, analise_id) if elemento.lon is not None else None
+        linha= _vizinho(session, elemento, raio, analise_id, criados) if elemento.lon is not None else None
         if linha is None:
             linha= Elemento(
                 categoria=elemento.category,
@@ -247,6 +253,7 @@ def write_catalog(
             )
             session.add(linha)
             session.flush()
+            criados.add(linha.id)
         else:
             linha.obstruido= linha.obstruido and elemento.obstruido
         for obs in elemento.observations:
@@ -256,7 +263,9 @@ def write_catalog(
                     imagem_id=imagens[obs.image.id].id,
                     bbox=list(obs.detection.bbox_xyxy),
                     classe=obs.detection.class_name,
-                    confianca=obs.detection.confidence,
+                    confianca=calibrar_confianca(
+                        classes.categorias[elemento.category], obs.detection.confidence
+                    ),
                     bearing=obs.bearing,
                 )
             )

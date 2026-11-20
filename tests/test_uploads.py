@@ -159,6 +159,20 @@ def test_extrai_frames_ao_ritmo_pedido(tmp_path):
     assert all(caminho.is_file() for _, caminho in frames)
 
 
+def test_video_com_demasiadas_imagens_e_recusado_sem_extrair(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_VIDEO", "5")
+    video= _video(tmp_path / "longo.avi", frames= 100, fps= 10)
+    with pytest.raises(ErroPipeline, match="geraria 20 imagens a 2 imagens por segundo, mais do que o máximo de 5"):
+        extrair_frames(video, 2.0, tmp_path / "frames")
+    assert not (tmp_path / "frames").exists()
+
+
+def test_video_no_limite_e_aceite(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAX_IMAGENS_VIDEO", "20")
+    video= _video(tmp_path / "curto.avi", frames= 100, fps= 10)
+    assert len(extrair_frames(video, 2.0, tmp_path / "frames")) == 20
+
+
 def test_video_que_nao_abre(tmp_path):
     caminho= tmp_path / "x.mp4"
     caminho.write_bytes(b"nada")
@@ -222,8 +236,12 @@ def test_carregar_video_com_gpx(tmp_path):
 def test_carregar_video_sem_gpx(tmp_path):
     _video(tmp_path / "0001_rua.avi")
     registos, avisos= carregar(tmp_path, "tk", {})
-    assert registos == []
-    assert any("sem GPX" in a for a in avisos)
+    assert len(registos) > 0
+    assert all(r.fonte == "video" and not r.localizavel for r in registos)
+    assert all((r.lon, r.lat, r.heading) == (None, None, None) for r in registos)
+    aviso= next(a for a in avisos if "sem GPX" in a)
+    assert "foram analisados" in aviso
+    assert len(avisos) == 1
 
 
 def test_deslocamento_fora_do_trilho_avisa(tmp_path):
@@ -233,8 +251,31 @@ def test_deslocamento_fora_do_trilho_avisa(tmp_path):
         [(40.0000, -8.0, "2026-05-01T10:00:00Z"), (40.0010, -8.0, "2026-05-01T10:00:03Z")],
     )
     registos, avisos= carregar(tmp_path, "tk", {"offset_s": 600})
-    assert registos == []
-    assert any("nenhum frame coincide" in a for a in avisos)
+    assert len(registos) > 0
+    assert not any(r.localizavel for r in registos)
+    assert any("nenhum frame coincide" in a and "ficam sem posição" in a for a in avisos)
+
+
+def test_video_com_gpx_ilegivel_e_analisado_sem_posicao(tmp_path):
+    _video(tmp_path / "0001_rua.avi")
+    (tmp_path / "0002_rua.gpx").write_text("isto nao e gpx")
+    registos, avisos= carregar(tmp_path, "tk", {})
+    assert len(registos) > 0
+    assert not any(r.localizavel for r in registos)
+    assert any("GPX" in a and "sem posição" in a for a in avisos)
+
+
+def test_frames_fora_do_trilho_ficam_sem_posicao_e_os_outros_mantem(tmp_path):
+    _video(tmp_path / "0001_rua.avi", frames= 30, fps= 10)
+    _gpx(
+        tmp_path / "0002_rua.gpx",
+        [(40.0000, -8.0, "2026-05-01T10:00:00Z"), (40.0010, -8.0, "2026-05-01T10:00:01.5Z")],
+    )
+    registos, avisos= carregar(tmp_path, "tk", {"fps": 2.0, "offset_s": 0})
+    assert len(registos) == 6
+    localizaveis= [r for r in registos if r.localizavel]
+    assert 0 < len(localizaveis) < len(registos)
+    assert any("frames sem posição" in a for a in avisos)
 
 
 def test_ler_ficheiro_reduz_imagens_grandes(tmp_path):

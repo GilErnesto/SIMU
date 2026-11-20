@@ -1,8 +1,8 @@
-# Zona piloto: Rua da Pega, Bairro da Gulbenkian, com 40 m de margem.
+# Zona piloto: Rua do ISCA até à Av. Dr. Mário Sacramento (rua do Mc).
 nome: Aveiro
 bbox:
-  lon_min: -8.6625
-  lat_min: 40.6291
-  lon_max: -8.6581
-  lat_max: 40.6382
+  lon_min: -8.653933
+  lat_min: 40.630337
+  lon_max: -8.648515
+  lat_max: 40.632975
 crs_metrico: EPSG:3763

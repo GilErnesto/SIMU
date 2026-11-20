@@ -17,7 +17,7 @@ from pipeline import checkpoint
 from pipeline.anonymize.egoblur import Anonymizer, caminho_anon, save_anon
 from pipeline.catalog import analises
 from pipeline.catalog.write import anon_paths, ensure_schema, known_image_ids, write_catalog
-from pipeline.config import load_classes, load_municipio
+from pipeline.config import aplicar_bbox, load_classes, load_municipio
 from pipeline.detect.infer import Detector, Limiares
 from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
@@ -39,6 +39,7 @@ PESOS_EXTRA= (Path("models/detetor_b23.pt"), Path("models/detetor_b23_1280.pt"),
 
 def pesos_padrao() -> str:
     return ",".join(str(p) for p in (PESOS_PRINCIPAIS, *PESOS_EXTRA) if p == PESOS_PRINCIPAIS or p.exists())
+CABECA_ILUMINACAO= "models/tipo_iluminacao.npz"
 
 
 def _variavel(nome: str) -> str:
@@ -60,12 +61,35 @@ def tipo_de_detetor(args: argparse.Namespace) -> str:
     return args.detetor
 
 
+def _versao(args: argparse.Namespace, classes, ficheiros: list[Path]) -> str:
+    resumo= hashlib.sha1()
+    resumo.update(
+        repr(
+            (
+                tipo_de_detetor(args),
+                args.limiar,
+                args.sem_refinar,
+                args.limiar_classe,
+                getattr(args, "sem_aumento", False),
+                getattr(args, "ladrilhos", False),
+                classes,
+            )
+        ).encode()
+    )
+    for ficheiro in ficheiros:
+        resumo.update(ficheiro.read_bytes())
+    return resumo.hexdigest()[:16]
+
+
 def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
+    ficheiros= []
     if tipo_de_detetor(args) == "yolo":
+        pesos= lista_de_pesos(args.pesos)
         membros= [
             Detector.from_weights(p, classes, limiar=args.limiar, aumentar=not getattr(args, "sem_aumento", False))
-            for p in lista_de_pesos(args.pesos)
+            for p in pesos
         ]
+        ficheiros.extend(pesos)
     else:
         from pipeline.detect.owl import OwlDetector
 
@@ -75,6 +99,10 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
 
         cabeca= Path(getattr(args, "cabeca_sinal", None) or CABECA_SINAL)
         cabecas= {"sinal": cabeca} if cabeca.exists() else {}
+        cabeca_iluminacao= Path(getattr(args, "cabeca_iluminacao", None) or CABECA_ILUMINACAO)
+        if cabeca_iluminacao.exists():
+            cabecas["iluminacao"]= cabeca_iluminacao
+        ficheiros.extend(cabecas.values())
         refinador= Refinador.load(classes, limiar=args.limiar_classe, cabecas=cabecas)
         # Each ensemble member is refined on its own, then they are merged: on the gold set this beat
         # merging the raw boxes first (the type check lowers odd boxes before they are averaged).
@@ -89,7 +117,20 @@ def _detetor(args: argparse.Namespace, classes, limiares: bool= True):
         from pipeline.detect.ladrilhos import Ladrilhos
 
         detetor= Ladrilhos(detetor)
-    return Limiares(detetor, classes) if limiares else detetor
+    resultado= Limiares(detetor, classes) if limiares else detetor
+    resultado.versao= _versao(args, classes, ficheiros)
+    return resultado
+
+
+def inclinadas_de(detetor) -> dict[float, frozenset[str]]:
+    classes= getattr(detetor, "classes", None)
+    if classes is None:
+        return {}
+    por_inclinacao= {}
+    for nome, categoria in classes.categorias.items():
+        if categoria.inclinacao_panorama:
+            por_inclinacao.setdefault(categoria.inclinacao_panorama, set()).add(nome)
+    return {pitch: frozenset(nomes) for pitch, nomes in por_inclinacao.items()}
 
 
 def _anonima_em_disco(registo: ImageRecord, pasta_anon: Path) -> np.ndarray | None:
@@ -126,7 +167,8 @@ def processar(
     saida=sys.stderr,
     ao_progredir: Callable[[int, int], None] | None= None,
 ) -> tuple[dict[str, tuple[ImageRecord, list[Detection]]], list[str]]:
-    guardadas= checkpoint.load(ficheiro_checkpoint)
+    versao= getattr(detetor, "versao", None)
+    guardadas= checkpoint.load(ficheiro_checkpoint, versao)
     resultado= {}
     falhas= []
     inicio= time.time()
@@ -150,10 +192,10 @@ def processar(
             registo.caminho_anon= str(caminho_anon(pasta_anon, registo))
         registo.height, registo.width= anonima.shape[:2]
         if registo.camera_type == "spherical":
-            deteccoes= detect_panorama(detetor, registo.id, anonima)
+            deteccoes= detect_panorama(detetor, registo.id, anonima, inclinadas=inclinadas_de(detetor))
         else:
             deteccoes= detetor.detect(registo.id, anonima)
-        checkpoint.append(ficheiro_checkpoint, registo, deteccoes)
+        checkpoint.append(ficheiro_checkpoint, registo, deteccoes, versao)
         resultado[registo.id_fonte]= (registo, deteccoes)
         if n % PASSO_PROGRESSO == 0:
             ritmo= n / (time.time() - inicio)
@@ -218,6 +260,7 @@ def _token_da_zona(municipio) -> str:
 def run(args: argparse.Namespace) -> int:
     municipio_path= Path(args.municipio)
     municipio= load_municipio(municipio_path)
+    municipio= aplicar_bbox(municipio, args.bbox)
     classes= load_classes(municipio_path.parent / "classes.yaml")
     token= _variavel("MAPILLARY_TOKEN")
     url_bd= _variavel("DATABASE_URL")
@@ -255,7 +298,8 @@ def run(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.run")
-    parser.add_argument("--municipio", required=True, help="ficheiro municipio.yaml")
+    parser.add_argument("--municipio", default="config/municipio.yaml", help="ficheiro municipio.yaml")
+    parser.add_argument("--bbox", default=None, help="lon_min,lat_min,lon_max,lat_max: substitui a bbox do município, sem criar .yaml")
     parser.add_argument("--fonte", choices=FONTES, default="mapillary")
     parser.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
     parser.add_argument("--limiar", type=float, default=0.2, help="confiança mínima do OWLv2")

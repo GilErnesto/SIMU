@@ -1,9 +1,14 @@
-from dataclasses import dataclass, field
+import bisect
+import itertools
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
 
 from pipeline.errors import ErroPipeline
+from pipeline.geolocate.triangulate import ALCANCE_MAX_M
+
+ZONA_MAX_GRAUS= 0.02
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,14 @@ class Categoria:
     alias: dict[str, str]= field(default_factory=dict)
     combinar_confianca: bool= True
     exigem_confirmacao: tuple[str, ...]= ()
+    calibracao: tuple[tuple[float, float], ...]= ()
+    alcance_max_m: float= ALCANCE_MAX_M
+    seguir_video: bool= False
+    tipos_exclusivos: bool= False
+    alturas_por_classe: dict[str, float]= field(default_factory=dict)
+    lado_minimo_px: float | None= None
+    suprimir_contidas: float | None= None
+    inclinacao_panorama: float | None= None
 
 
 @dataclass(frozen=True)
@@ -53,6 +66,30 @@ def _ler(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _calibracao(campos: dict) -> tuple[tuple[float, float], ...]:
+    pares= tuple((float(bruto), float(calibrado)) for bruto, calibrado in campos.get("calibracao", ()))
+    brutos= [bruto for bruto, _ in pares]
+    if any(not 0 <= valor <= 1 for par in pares for valor in par):
+        raise ValueError("calibracao: valores fora de [0, 1]")
+    if any(anterior >= seguinte for anterior, seguinte in itertools.pairwise(brutos)):
+        raise ValueError("calibracao: valores brutos têm de ser estritamente crescentes")
+    return pares
+
+
+def calibrar_confianca(categoria: Categoria, confianca: float) -> float:
+    pares= categoria.calibracao
+    if not pares:
+        return confianca
+    brutos= [bruto for bruto, _ in pares]
+    if confianca <= brutos[0]:
+        return pares[0][1]
+    if confianca >= brutos[-1]:
+        return pares[-1][1]
+    i= bisect.bisect_right(brutos, confianca)
+    (x0, y0), (x1, y1)= pares[i - 1], pares[i]
+    return y0 + (y1 - y0) * (confianca - x0) / (x1 - x0)
+
+
 def load_municipio(path: Path) -> Municipio:
     dados= _ler(path)
     try:
@@ -67,6 +104,20 @@ def load_municipio(path: Path) -> Municipio:
     if lon_min >= lon_max or lat_min >= lat_max:
         raise ErroPipeline("bbox inválida: os mínimos têm de ser menores que os máximos")
     return Municipio(nome, (lon_min, lat_min, lon_max, lat_max), crs)
+
+
+def aplicar_bbox(municipio: Municipio, texto: str | None) -> Municipio:
+    if not texto:
+        return municipio
+    try:
+        lon_min, lat_min, lon_max, lat_max= (float(valor) for valor in texto.split(","))
+    except ValueError as erro:
+        raise ErroPipeline("--bbox deve ser lon_min,lat_min,lon_max,lat_max") from erro
+    if not (-180 <= lon_min and lon_max <= 180 and -90 <= lat_min and lat_max <= 90):
+        raise ErroPipeline("--bbox fora de limites: a ordem é lon_min,lat_min,lon_max,lat_max")
+    if lon_min >= lon_max or lat_min >= lat_max:
+        raise ErroPipeline("bbox inválida: os mínimos têm de ser menores que os máximos")
+    return replace(municipio, bbox=(lon_min, lat_min, lon_max, lat_max))
 
 
 def load_classes(path: Path) -> Classes:
@@ -94,6 +145,14 @@ def load_classes(path: Path) -> Classes:
                 alias=dict(campos.get("alias", {})),
                 combinar_confianca=bool(campos.get("combinar_confianca", True)),
                 exigem_confirmacao=tuple(campos.get("exigem_confirmacao", ())),
+                calibracao=_calibracao(campos),
+                alcance_max_m=float(campos.get("alcance_max_m", ALCANCE_MAX_M)),
+                seguir_video=bool(campos.get("seguir_video", False)),
+                tipos_exclusivos=bool(campos.get("tipos_exclusivos", False)),
+                alturas_por_classe={str(k): float(v) for k, v in dict(campos.get("alturas_por_classe", {})).items()},
+                lado_minimo_px=None if campos.get("lado_minimo_px") is None else float(campos["lado_minimo_px"]),
+                suprimir_contidas=None if campos.get("suprimir_contidas") is None else float(campos["suprimir_contidas"]),
+                inclinacao_panorama=None if campos.get("inclinacao_panorama") is None else float(campos["inclinacao_panorama"]),
             )
     except (KeyError, TypeError, ValueError, AttributeError) as erro:
         raise ErroPipeline(f"classes.yaml inválido: {erro!r}") from erro

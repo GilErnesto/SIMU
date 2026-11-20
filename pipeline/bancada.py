@@ -16,12 +16,12 @@ from sqlalchemy.orm import Session
 from pipeline import checkpoint, evaluate
 from pipeline.catalog import analises
 from pipeline.catalog.write import Imagem, element_confidence
-from pipeline.config import load_classes, load_municipio
+from pipeline.config import Classes, aplicar_bbox, calibrar_confianca, load_classes, load_municipio
 from pipeline.detect.panorama import detect_panorama
 from pipeline.errors import ErroPipeline
 from pipeline.geolocate.locate import locate
 from pipeline.models import Element, ImageRecord
-from pipeline.run import CABECA_SINAL, _detetor, pesos_padrao
+from pipeline.run import CABECA_ILUMINACAO, CABECA_SINAL, _detetor, inclinadas_de, pesos_padrao
 
 RAIO_COBERTURA_M= 30.0
 
@@ -99,7 +99,7 @@ def detetar(registos: list[ImageRecord], detetor, cache: Path, saida=sys.stderr)
             continue
         registo.height, registo.width= imagem.shape[:2]
         if registo.camera_type == "spherical":
-            deteccoes= detect_panorama(detetor, registo.id, imagem)
+            deteccoes= detect_panorama(detetor, registo.id, imagem, inclinadas=inclinadas_de(detetor))
         else:
             deteccoes= detetor.detect(registo.id, imagem)
         checkpoint.append(cache, registo, deteccoes)
@@ -109,10 +109,14 @@ def detetar(registos: list[ImageRecord], detetor, cache: Path, saida=sys.stderr)
     return feitas
 
 
-def elementos_geojson(elementos: list[Element]) -> dict:
+def elementos_geojson(elementos: list[Element], classes: Classes | None= None) -> dict:
     features= []
     for elemento in elementos:
         confiancas= [o.detection.confidence for o in elemento.observations]
+        if classes is not None:
+            confiancas= [
+                calibrar_confianca(classes.categorias[elemento.category], c) for c in confiancas
+            ]
         features.append(
             {
                 "type": "Feature",
@@ -146,6 +150,7 @@ def imagens_geojson(registos: list[ImageRecord]) -> dict:
 def main(argv: list[str] | None= None) -> int:
     parser= argparse.ArgumentParser(prog="python -m pipeline.bancada")
     parser.add_argument("--municipio", default="config/municipio.yaml")
+    parser.add_argument("--bbox", default=None, help="lon_min,lat_min,lon_max,lat_max: substitui a bbox do município, sem criar .yaml")
     parser.add_argument("--analise", default="inicial", help="token da análise cujas imagens se usam")
     parser.add_argument("--nome", required=True, help="nome da experiência (pasta de resultados)")
     parser.add_argument("--detetor", choices=("auto", "owlv2", "yolo"), default="auto")
@@ -153,6 +158,7 @@ def main(argv: list[str] | None= None) -> int:
     parser.add_argument("--limiar", type=float, default=0.2)
     parser.add_argument("--limiar-classe", type=float, default=0.3)
     parser.add_argument("--cabeca-sinal", default=CABECA_SINAL)
+    parser.add_argument("--cabeca-iluminacao", default=CABECA_ILUMINACAO)
     parser.add_argument("--sem-refinar", action="store_true")
     parser.add_argument("--anon-dir", help="por omissão data/anon (catálogo) ou data/avaliacao/imagens")
     parser.add_argument("--fonte", choices=("catalogo", "mapillary"), default="catalogo")
@@ -167,6 +173,7 @@ def main(argv: list[str] | None= None) -> int:
     load_dotenv()
     try:
         municipio= load_municipio(Path(args.municipio))
+        municipio= aplicar_bbox(municipio, args.bbox)
         classes= load_classes(Path(args.classes))
         if args.fonte == "mapillary":
             from pipeline.anonymize.egoblur import Anonymizer
@@ -203,7 +210,7 @@ def main(argv: list[str] | None= None) -> int:
             if d.confidence >= classes.categorias[d.category].limiar_detecao
         ]
         elementos= locate(imagens, deteccoes, municipio, classes)
-        previsto= elementos_geojson(elementos)
+        previsto= elementos_geojson(elementos, classes)
         (pasta / "previsto.geojson").write_text(json.dumps(previsto), encoding="utf-8")
         (pasta / "imagens.geojson").write_text(json.dumps(imagens_geojson(imagens)), encoding="utf-8")
         print(f"{len(imagens)} imagens, {len(deteccoes)} deteções, {len(elementos)} elementos em {pasta}")
