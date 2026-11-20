@@ -180,7 +180,7 @@ python -m training.robustez --cabecas models/tipo_sinal.npz      # tipo certo em
 ```
 
 - `data/ouro` (200 imagens revistas à mão) é o conjunto de teste: nunca entra no treino. `avaliar --degradar desfocada|movimento|escura|jpeg|metade` mede com as fotos estragadas.
-- `training.tipos_web` treina a cabeça do tipo com os recortes revistos e com os sinais de referência da web, estragados de propósito (desfocados, tapados, cortados, rodados, pequenos, escuros), e mistura-a com a cabeça antiga.
+- `training.tipos_web` treina a cabeça do tipo com os recortes revistos e com os sinais de referência da web, estragados de propósito (desfocados, tapados, cortados, rodados, pequenos, escuros), e, com `--antiga <cabeça.npz>`, mistura-a com outra cabeça (sem isso grava só a nova).
 - `limiar_descarte` em `config/classes.yaml`: o CLIP só deita fora uma caixa com essa certeza; abaixo disso fica com o melhor tipo. As imagens da web são de terceiros (fontes em `data/datasets/sinais_web/FONTES.md`): uso não comercial.
 
 ## Avaliação

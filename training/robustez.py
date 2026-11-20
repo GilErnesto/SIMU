@@ -4,7 +4,7 @@ Each reviewed crop of the test set is degraded in a fixed way (blur, motion blur
 bad JPEG, dark, occlusion, cut by the border) and the head is scored on each version.
 Types are compared by official category (STOP counts as cedência).
 
-    python -m training.robustez --cabecas models/tipo_sinal.npz models/tipo_sinal_original.npz
+    python -m training.robustez --cabecas models/tipo_sinal.npz models/tipo_sinal_b3.npz
 """
 
 import argparse
