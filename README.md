@@ -49,6 +49,17 @@ Abrir `http://localhost:8080`. A API fica em `http://localhost:8010` (documenta�
 
 Desde 20/11 o EgoBlur corre duas passagens (a segunda sobre a imagem já desfocada, para apanhar o que a primeira deixou escapar): cerca de 0,3 s a mais por imagem na GPU (medido) e o dobro do tempo no CPU, por isso os tempos desta tabela são anteriores. O CPU serve para poucas fotografias. Na GPU o EgoBlur corre em meia precisão com o limiar de rostos e matrículas 0,05 mais baixo: desfoca um pouco mais, nunca menos. A imagem do worker com GPU tem cerca de 11 GB; o primeiro build demora uns minutos, os seguintes só segundos se mudar apenas o código. `WORKER_CPUS` e `WORKER_MEM` no `.env` limitam o worker.
 
+### Mapa de Portugal (Protomaps)
+
+O mapa da interface é vetorial (Protomaps) e lê um ficheiro `data/mapa/portugal.pmtiles` (fora do git), que o nginx serve a partir de um volume. Funciona sem internet. Para o gerar (cerca de 650 MB, só o continente, até ao zoom 15), com o [`pmtiles`](https://github.com/protomaps/go-pmtiles/releases) e a build mais recente de `https://build-metadata.protomaps.dev/builds.json`:
+
+```bash
+mkdir -p data/mapa
+pmtiles extract https://build.protomaps.com/<data>.pmtiles data/mapa/portugal.pmtiles --bbox=-9.55,36.95,-6.15,42.20 --maxzoom=15
+```
+
+Sem este ficheiro o mapa aparece vazio (os marcadores continuam a ver-se). Em desenvolvimento (`npm run dev`) serve-se o ficheiro com um atalho `frontend/public/mapa` para `data/mapa`, ou define-se `MAPA_URL` para o Vite o ir buscar a uma stack já a correr. Dados do mapa: © OpenStreetMap (ODbL) e Protomaps.
+
 ## Usar a interface
 
 1. Largar fotografias, vídeos e GPX na página inicial. Cada envio é uma análise, com endereço próprio (`/a/<código>`).

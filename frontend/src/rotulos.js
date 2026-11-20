@@ -38,12 +38,6 @@ export function rotuloClasse(config, categoria, classe) {
   return encontrada?.rotulo ?? classe;
 }
 
-export function indiceCategoria(config, categoria) {
-  const nomes= Object.keys(config?.categorias ?? {});
-  const indice= nomes.indexOf(categoria);
-  return (indice < 0 ? 0 : indice) % 3;
-}
-
 export function lerNumero(texto) {
   return Number.parseFloat(String(texto).replace(",", "."));
 }

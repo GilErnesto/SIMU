@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { CircleMarker, MapContainer, Rectangle, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { CircleMarker, MapContainer, Rectangle, useMap, useMapEvents } from "react-leaflet";
 
 import { criarAnaliseZona, obterConfig } from "./api.js";
+import CamadaMapa from "./CamadaMapa.jsx";
 import "./zona.css";
 
 const ZONA_MAX_GRAUS= 0.02;
@@ -220,12 +221,7 @@ export default function ZonaNoMapa({ aoFechar, aoEnviar }) {
               Toque no mapa para marcar um canto da zona e toque noutro canto para fechar o retângulo.
             </p>
             <MapContainer bounds={limitesDe(config.bbox)} className="zona-mapa" maxZoom={20} doubleClickZoom={false}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                maxNativeZoom={19}
-                maxZoom={20}
-              />
+              <CamadaMapa />
               <Escolha cantoInicial={cantoInicial} zona={zona} aoTocar={aoTocar} />
             </MapContainer>
           </>

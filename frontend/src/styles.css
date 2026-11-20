@@ -592,61 +592,24 @@ select {
 }
 
 .pino {
-  --cor: var(--tinta);
   position: relative;
   display: inline-block;
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  background: var(--cor);
-  border: 2px solid #ffffff;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--tinta);
+}
+
+.pino .simbolo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
 .pino--legenda {
-  width: 20px;
-  height: 20px;
-}
-
-.pino--c0 {
-  --cor: var(--c0);
-}
-
-.pino--c1 {
-  --cor: var(--c1);
-  border-radius: 3px;
-}
-
-.pino--c2 {
-  --cor: var(--c2);
-  border-radius: 3px;
-  transform: rotate(45deg) scale(0.82);
-}
-
-.pino--validado::after,
-.pino--corrigido::after {
-  content: "";
-  position: absolute;
-  background: #ffffff;
-}
-
-.pino--validado::after {
-  inset: 4px;
-  border-radius: 50%;
-}
-
-.pino--corrigido::after {
-  left: 2px;
-  right: 2px;
-  top: 6px;
-  bottom: 6px;
-}
-
-.pino--rejeitado {
-  background: transparent;
-  border: 3px dashed var(--cor);
-  box-shadow: 0 0 0 1px #ffffff;
+  width: 26px;
+  height: 26px;
 }
 
 .pino--ativo {
